@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { WarehouseService } from './warehouse.service.js';
 import { requirePermission } from '../../middleware/permission.middleware.js';
 import { PERMISSIONS } from '../../shared/permissions.js';
+import { parsePagination } from '../../shared/http.js';
 import { z } from 'zod';
 
 const router = Router({ mergeParams: true });
@@ -26,8 +27,7 @@ router.get(
   requirePermission(PERMISSIONS.WAREHOUSES_VIEW) as any,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const page = parseInt(req.query.page as string) || undefined;
-      const pageSize = parseInt(req.query.pageSize as string) || undefined;
+      const { page, pageSize } = parsePagination(req.query);
       const includeArchived = req.query.includeArchived === 'true';
       const result = await WarehouseService.list(req.workspace!.id, { page, pageSize, includeArchived });
       res.json({ success: true, ...result });

@@ -3,6 +3,8 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import pkg from 'pg';
+import { seedPlansFromEnv, seedRoleTemplatesFromEnv, seedConfigDefaults } from './seed-helpers.js';
+
 const { Client } = pkg;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -55,6 +57,9 @@ async function runMigrations() {
     '016_fix_workspace_members_rls_recursion.sql',
     '017_warehouse_ops_completion.sql',
     '018_reservations.sql',
+    '019_db_driven_config.sql',
+    '020_goods_receipts.sql',
+    '021_saas_business_layer.sql',
   ];
 
   // Use the transaction mode pooler for migrations
@@ -107,6 +112,16 @@ async function runMigrations() {
         console.log(`ℹ️  Platform admin skipped (no user yet): ${email}`);
       }
     }
+
+    // ════════════════════════════════════════════════════════════════
+    // Phase 7b: DB-driven configuration seeding (no hardcoded business data)
+    // Plans, role templates, and operational defaults come from environment
+    // variables and are written INTO tables — the DB is the runtime source
+    // of truth; the env vars only bootstrap it.
+    // ════════════════════════════════════════════════════════════════
+    await seedPlansFromEnv(client);
+    await seedRoleTemplatesFromEnv(client);
+    await seedConfigDefaults(client);
 
     console.log('\n✅ All migrations completed successfully!');
   } catch (err: any) {

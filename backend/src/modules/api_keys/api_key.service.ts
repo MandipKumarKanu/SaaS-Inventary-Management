@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../config/supabase.js';
 import { AppError } from '../../shared/errors.js';
+import { logger } from '../../config/logger.js';
 import crypto from 'crypto';
 
 export class APIKeyService {
@@ -91,8 +92,15 @@ export class APIKeyService {
       throw AppError.unauthorized('Invalid or revoked API key', 'INVALID_API_KEY');
     }
 
-    // Update last_used_at timestamp asynchronously
-    supabaseAdmin.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', data.id).then();
+    // Update last_used_at timestamp asynchronously — never blocks auth, but
+    // the promise IS caught so it can't become an unhandled rejection.
+    supabaseAdmin
+      .from('api_keys')
+      .update({ last_used_at: new Date().toISOString() })
+      .eq('id', data.id)
+      .then(() => undefined, (err) => {
+        logger.warn('Failed to update api_key last_used_at', { apiKeyId: data.id, error: err?.message });
+      });
 
     return { workspaceId: data.workspace_id, scopes: data.scopes };
   }

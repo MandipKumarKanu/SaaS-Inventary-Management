@@ -79,7 +79,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_unread ON public.notifications(work
 -- Idempotency for worker-generated expiring-batch alerts:
 -- at most ONE notification per batch per workspace per day.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_notifications_expiring_batch_daily
-  ON public.notifications (workspace_id, reference_id, (created_at AT TIME ZONE 'utc')::date)
+  ON public.notifications (workspace_id, reference_id, ((created_at AT TIME ZONE 'utc')::date))
   WHERE type = 'expiring_batch';
 
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;

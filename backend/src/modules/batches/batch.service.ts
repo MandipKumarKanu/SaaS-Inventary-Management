@@ -76,6 +76,70 @@ export class BatchService {
     return { data: annotated, meta: { page: page || 1, pageSize: page ? pageSize : total, total, totalPages: page ? Math.ceil(total / pageSize) : 1 } };
   }
 
+  static async getExpiryOverview(workspaceId: string) {
+    const { data: batches, error } = await supabaseAdmin
+      .from('batches')
+      .select('*, product:products(id, name, sku, cost_price), warehouse:warehouses(id, name, code)')
+      .eq('workspace_id', workspaceId)
+      .order('expiry_date', { ascending: true, nullsFirst: false });
+
+    if (error) throw error;
+
+    const now = new Date();
+    const d30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const d60 = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+
+    let expiredCount = 0;
+    let expiring30Count = 0;
+    let expiring60Count = 0;
+    let totalQtyAtRisk = 0;
+    let totalValueAtRisk = 0;
+
+    const annotated = (batches || []).map((batch) => {
+      let status: 'Valid' | 'Expiring Soon' | 'Expired' = 'Valid';
+      const qty = batch.synced_quantity ?? batch.quantity ?? 0;
+      const unitCost = Number(batch.product?.cost_price || 0);
+
+      if (batch.expiry_date) {
+        const exp = new Date(batch.expiry_date);
+        if (exp < now) {
+          status = 'Expired';
+          expiredCount++;
+          totalQtyAtRisk += qty;
+          totalValueAtRisk += qty * unitCost;
+        } else if (exp <= d30) {
+          status = 'Expiring Soon';
+          expiring30Count++;
+          totalQtyAtRisk += qty;
+          totalValueAtRisk += qty * unitCost;
+        } else if (exp <= d60) {
+          expiring60Count++;
+        }
+      }
+
+      return {
+        ...batch,
+        expirationStatus: status,
+        unitCost,
+        totalValue: Math.round(qty * unitCost * 100) / 100,
+      };
+    });
+
+    const urgentBatches = annotated.filter((b) => b.expirationStatus !== 'Valid').slice(0, 15);
+
+    return {
+      summary: {
+        totalBatches: (batches || []).length,
+        expiredCount,
+        expiring30Count,
+        expiring60Count,
+        totalQtyAtRisk,
+        totalValueAtRisk: Math.round(totalValueAtRisk * 100) / 100,
+      },
+      urgentBatches,
+    };
+  }
+
   static async getById(id: string, workspaceId: string) {
     const { data, error } = await supabaseAdmin
       .from('batches')

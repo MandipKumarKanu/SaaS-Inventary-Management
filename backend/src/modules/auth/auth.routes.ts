@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { AuthService } from './auth.service.js';
-import { signupSchema, loginSchema, forgotPasswordSchema } from './auth.validators.js';
+import { signupSchema, loginSchema, forgotPasswordSchema, updateProfileSchema } from './auth.validators.js';
 import { authMiddleware } from '../../middleware/auth.middleware.js';
 import { AuthenticatedRequest } from '../../shared/types.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -67,11 +68,7 @@ router.post('/logout', authMiddleware as any, async (req: Request, res: Response
  */
 router.post('/refresh', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { refresh_token } = req.body;
-    if (!refresh_token) {
-      res.status(400).json({ success: false, error: { code: 'BAD_REQUEST', message: 'refresh_token is required' } });
-      return;
-    }
+    const refresh_token = z.string().min(1).parse(req.body?.refresh_token);
     const result = await AuthService.refreshToken(refresh_token);
     res.json({ success: true, data: result });
   } catch (err) {
@@ -113,8 +110,9 @@ router.get('/me', authMiddleware as any, async (req: Request, res: Response, nex
 router.patch('/me', authMiddleware as any, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const authReq = req as AuthenticatedRequest;
-    const { name, avatar_url } = req.body;
-    const profile = await AuthService.updateProfile(authReq.user.id, { name, avatar_url });
+    // Strict whitelist — validated & stripped, no mass-assignment
+    const updates = updateProfileSchema.parse(req.body);
+    const profile = await AuthService.updateProfile(authReq.user.id, updates);
     res.json({ success: true, data: profile });
   } catch (err) {
     next(err);

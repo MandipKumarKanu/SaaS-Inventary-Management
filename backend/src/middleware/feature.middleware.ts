@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { AppError } from '../shared/errors.js';
 import { PlanCatalogService, FeatureKey } from '../services/plan-catalog.service.js';
+import { ConfigService } from '../services/config.service.js';
 
 /**
  * Phase 3: plan feature gating (PRD §16).
@@ -28,11 +29,13 @@ export function requireFeature(feature: FeatureKey) {
         .eq('workspace_id', workspaceId)
         .maybeSingle();
 
-      // No subscription row: treat as free-tier (fail closed for paid features).
+      // No subscription row: fall back to the configured default tier
+      // (config_defaults → env), fail closed for paid features.
       if (!sub?.plan_id) {
-        const plan = await PlanCatalogService.getPlanByName('free');
+        const defaultTier = await ConfigService.getOr<string>('default_plan_tier', 'free');
+        const plan = await PlanCatalogService.getPlanByName(defaultTier);
         if (!plan?.features[feature]) {
-          throw AppError.planFeatureDisabled(feature, plan?.displayName || 'Free');
+          throw AppError.planFeatureDisabled(feature, plan?.displayName || defaultTier);
         }
         (req as any).planTier = plan.name;
         next();

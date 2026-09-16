@@ -8,7 +8,10 @@ export class MemberService {
   /**
    * List members of a workspace
    */
-  static async list(workspaceId: string, page = 1, pageSize = 25) {
+  static async list(workspaceId: string, rawPage = 1, rawPageSize = 25) {
+    // Input-side cap: never serve unbounded pages regardless of caller.
+    const page = Math.max(1, Math.floor(rawPage) || 1);
+    const pageSize = Math.min(Math.max(1, Math.floor(rawPageSize) || 25), 100);
     const { data, error, count } = await supabaseAdmin
       .from('workspace_members')
       .select(`
@@ -208,25 +211,43 @@ export class MemberService {
 
     if (!member) throw AppError.notFound('Member not found');
 
-    // Don't allow removing yourself if you're the only owner
-    // Check if member has Owner role
-    const { data: ownerCheck } = await supabaseAdmin
-      .from('member_roles')
-      .select('role:roles(name)')
-      .eq('member_id', memberId);
+    // Don't allow removing the last OWNER. Phase 7b: ownership is detected
+    // via the role_templates is_owner FLAG (owner template resolved per this
+    // workspace's roles), never by hardcoding the role name 'Owner'.
+    const { data: ownerTemplate } = await supabaseAdmin
+      .from('role_templates')
+      .select('name')
+      .eq('is_owner', true)
+      .maybeSingle();
 
-    const isOwner = ownerCheck?.some((mr: any) => mr.role?.name === 'Owner');
-
-    if (isOwner) {
-      // Count other owners
-      const { count } = await supabaseAdmin
+    let isOwner = false;
+    if (ownerTemplate) {
+      const { data: ownerCheck } = await supabaseAdmin
         .from('member_roles')
-        .select('id', { count: 'exact' })
-        .eq('role_id', (ownerCheck?.find((mr: any) => mr.role?.name === 'Owner') as any)?.role_id)
-        .neq('member_id', memberId);
+        .select('role:roles(name)')
+        .eq('member_id', memberId);
+      isOwner = ownerCheck?.some((mr: any) => mr.role?.name === ownerTemplate.name) ?? false;
+    }
 
-      if (!count || count === 0) {
-        throw AppError.badRequest('Cannot remove the last owner of a workspace');
+    if (isOwner && ownerTemplate) {
+      // Count other owners: members holding the owner-NAMED role in this workspace
+      const { data: ownerRole } = await supabaseAdmin
+        .from('roles')
+        .select('id')
+        .eq('workspace_id', workspaceId)
+        .eq('name', ownerTemplate.name)
+        .maybeSingle();
+
+      if (ownerRole) {
+        const { count } = await supabaseAdmin
+          .from('member_roles')
+          .select('id', { count: 'exact' })
+          .eq('role_id', ownerRole.id)
+          .neq('member_id', memberId);
+
+        if (!count || count === 0) {
+          throw AppError.badRequest('Cannot remove the last owner of a workspace');
+        }
       }
     }
 

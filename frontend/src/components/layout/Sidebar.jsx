@@ -4,6 +4,8 @@ import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { InteractiveTourModal } from '../tour/InteractiveTourModal';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
+import { usePlanFeature } from '../../store/usePlanStore';
+import { Lock } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -58,89 +60,110 @@ import {
   ChevronDown,
 } from 'lucide-react';
 
+// Phase 9 (PRD §11/§13): every item carries the permission that gates it.
+// `null` = available to every member of the workspace. The Sidebar filters
+// by the member's effective permissions; RouteGuard enforces on navigation.
 const NAV_SECTIONS = [
   {
     label: 'Overview',
     items: [
-      { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-      { label: 'AI Copilot', path: '/ai-copilot', icon: Bot },
-      { label: 'Notifications', path: '/notifications', icon: Bell },
+      { label: 'Dashboard', path: 'dashboard', icon: LayoutDashboard, permission: null },
+      { label: 'AI Copilot', path: 'ai-copilot', icon: Bot, permission: null },
+      { label: 'Notifications', path: 'notifications', icon: Bell, permission: null },
     ],
   },
   {
     label: 'Catalog',
     items: [
-      { label: 'Products', path: '/products', icon: Package },
-      { label: 'Categories', path: '/categories', icon: Tag },
-      { label: 'Suppliers', path: '/suppliers', icon: Truck },
-      { label: 'Customers', path: '/customers', icon: Users },
+      { label: 'Products', path: 'products', icon: Package, permission: 'products.view' },
+      { label: 'Categories', path: 'categories', icon: Tag, permission: 'products.view' },
+      { label: 'Suppliers', path: 'suppliers', icon: Truck, permission: 'purchases.view' },
+      { label: 'Customers', path: 'customers', icon: Users, permission: 'sales.view' },
     ],
   },
   {
     label: 'Inventory',
     items: [
-      { label: 'Stock Balances', path: '/inventory', icon: SlidersHorizontal },
-      { label: 'Stock Ledger', path: '/ledger', icon: History },
-      { label: 'Stock Transfers', path: '/transfers', icon: ArrowLeftRight },
-      { label: 'Cycle Counting', path: '/counts', icon: ClipboardList },
-      { label: 'Barcode Scanner', path: '/scanner', icon: Barcode },
-      { label: 'FEFO Batches', path: '/batches', icon: Calendar },
-      { label: 'Warehouses', path: '/warehouses', icon: Warehouse },
+      { label: 'Stock Balances', path: 'inventory', icon: SlidersHorizontal, permission: 'inventory.view' },
+      { label: 'Stock Ledger', path: 'ledger', icon: History, permission: 'inventory.view' },
+      { label: 'Stock Transfers', path: 'transfers', icon: ArrowLeftRight, permission: 'transfers.view' },
+      { label: 'Cycle Counting', path: 'counts', icon: ClipboardList, permission: 'inventory.count' },
+      { label: 'Barcode Scanner', path: 'scanner', icon: Barcode, permission: 'products.view' },
+      { label: 'FEFO Batches', path: 'batches', icon: Calendar, permission: 'inventory.view' },
+      { label: 'Warehouses', path: 'warehouses', icon: Warehouse, permission: 'warehouses.view' },
     ],
   },
   {
     label: 'Orders',
     items: [
-      { label: 'Purchase Orders', path: '/purchases', icon: ShoppingBag },
-      { label: 'Sales Orders', path: '/sales', icon: ShoppingCart },
-      { label: 'Customer Returns', path: '/returns', icon: RotateCcw },
-      { label: 'Reorder Alerts', path: '/reorder', icon: AlertOctagon },
-      { label: 'PO Auto-Pilot', path: '/automation', icon: Zap },
+      { label: 'Purchase Orders', path: 'purchases', icon: ShoppingBag, permission: 'purchases.view' },
+      { label: 'Sales Orders', path: 'sales', icon: ShoppingCart, permission: 'sales.view' },
+      { label: 'Customer Returns', path: 'returns', icon: RotateCcw, permission: 'returns.view' },
+      { label: 'Reorder Alerts', path: 'reorder', icon: AlertOctagon, permission: 'purchases.view' },
+      { label: 'PO Auto-Pilot', path: 'automation', icon: Zap, permission: 'settings.view' },
     ],
   },
   {
     label: 'Analytics',
     items: [
-      { label: 'ABC Analysis', path: '/abc-analysis', icon: Layers },
-      { label: 'Demand Forecast', path: '/forecast', icon: TrendingUp },
-      { label: 'Reports Center', path: '/reports', icon: FileText },
-      { label: 'Bulk CSV Import', path: '/import', icon: UploadCloud },
+      { label: 'ABC Analysis', path: 'abc-analysis', icon: Layers, permission: 'reports.view' },
+      { label: 'Demand Forecast', path: 'forecast', icon: TrendingUp, permission: 'reports.view' },
+      { label: 'Reports Center', path: 'reports', icon: FileText, permission: 'reports.view' },
+      { label: 'Bulk CSV Import', path: 'import', icon: UploadCloud, permission: 'products.create' },
     ],
   },
   {
     label: 'Operations',
     items: [
-      { label: 'App Marketplace', path: '/integrations', icon: Share2 },
-      { label: 'Shipping Carriers', path: '/shipping', icon: Truck },
-      { label: '3PL Routing', path: '/settings/3pl-routing', icon: MapPin },
-      { label: 'Backup & Recovery', path: '/settings/backup', icon: Database },
+      { label: 'App Marketplace', path: 'integrations', icon: Share2, permission: 'settings.view' },
+      { label: 'Shipping Carriers', path: 'shipping', icon: Truck, permission: 'sales.view' },
+      { label: '3PL Routing', path: 'settings/3pl-routing', icon: MapPin, permission: 'warehouses.view' },
+      { label: 'Backup & Recovery', path: 'settings/backup', icon: Database, permission: 'settings.view' },
     ],
   },
   {
     label: 'Administration',
     items: [
-      { label: 'Team Members', path: '/team', icon: Users },
-      { label: 'Roles & Permissions', path: '/roles', icon: ShieldCheck },
-      { label: 'Workspace Settings', path: '/settings', icon: Settings },
-      { label: 'Developer API Keys', path: '/settings/api-keys', icon: Key },
-      { label: 'Webhooks Engine', path: '/settings/webhooks', icon: Webhook },
-      { label: 'Stripe Billing', path: '/settings/billing', icon: CreditCard },
-      { label: 'Multi-Currency', path: '/settings/currencies', icon: Globe },
-      { label: 'Security Audit Log', path: '/settings/security-audit', icon: ShieldAlert },
-      { label: 'Custom Branding', path: '/settings/branding', icon: Palette },
-      { label: 'Seed Demo Data', path: '/settings/demo-data', icon: Sparkles },
-      { label: 'Public API Docs', path: '/api-docs', icon: Code },
+      { label: 'Team Members', path: 'team', icon: Users, permission: 'team.view' },
+      { label: 'Roles & Permissions', path: 'roles', icon: ShieldCheck, permission: 'roles.view' },
+      { label: 'Workspace Settings', path: 'settings', icon: Settings, permission: 'settings.view' },
+      { label: 'Developer API Keys', path: 'settings/api-keys', icon: Key, permission: 'settings.view' },
+      { label: 'Webhooks Engine', path: 'settings/webhooks', icon: Webhook, permission: 'settings.view' },
+      { label: 'Stripe Billing', path: 'settings/billing', icon: CreditCard, permission: 'billing.view' },
+      { label: 'Multi-Currency', path: 'settings/currencies', icon: Globe, permission: 'settings.view' },
+      { label: 'Security Audit Log', path: 'settings/security-audit', icon: ShieldAlert, permission: 'settings.view' },
+      { label: 'Custom Branding', path: 'settings/branding', icon: Palette, permission: 'settings.view' },
+      { label: 'Seed Demo Data', path: 'settings/demo-data', icon: Sparkles, permission: 'settings.manage' },
+      { label: 'Public API Docs', path: 'api-docs', icon: Code, permission: null },
     ],
   },
 ];
 
 export function Sidebar({ onOpenCreateWorkspaceModal, onNavigate }) {
   const { user, logout } = useAuthStore();
-  const { activeWorkspace } = useWorkspaceStore();
+  const { activeWorkspace, permissions } = useWorkspaceStore();
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [openSections, setOpenSections] = useState(() => Object.fromEntries(NAV_SECTIONS.map((s) => [s.label, true])));
 
   const toggleSection = (label) => setOpenSections((prev) => ({ ...prev, [label]: !prev[label] }));
+
+  // Phase 9: permission-filtered navigation — items the member can't use
+  // disappear entirely; empty sections collapse away.
+  const canSee = (permission) => !permission || permissions.includes(permission);
+  const visibleSections = NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => canSee(item.permission)),
+  })).filter((section) => section.items.length > 0);
+
+  // Plan-gated items (PRD §16): server enforces; we show a lock affordance.
+  // forecasting gates the AI Copilot; api_access gates the public API docs.
+  const forecasting = usePlanFeature('forecasting');
+  const planLockFor = (item) => {
+    if (item.path === 'ai-copilot' && forecasting.loaded && !forecasting.enabled) {
+      return forecasting.summary?.plan_display_name || 'your plan';
+    }
+    return null;
+  };
 
   return (
     <div className="flex h-full w-[260px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
@@ -167,7 +190,7 @@ export function Sidebar({ onOpenCreateWorkspaceModal, onNavigate }) {
       {/* Nav */}
       <ScrollArea className="flex-1 px-3 py-3">
         <nav className="flex flex-col gap-4 pb-4" aria-label="Primary">
-          {NAV_SECTIONS.map((section) => {
+          {visibleSections.map((section) => {
             const open = openSections[section.label] ?? true;
             return (
               <div key={section.label}>
@@ -184,11 +207,13 @@ export function Sidebar({ onOpenCreateWorkspaceModal, onNavigate }) {
                   <div className="flex flex-col gap-0.5">
                     {section.items.map((item) => {
                       const Icon = item.icon;
+                      const lockedBy = planLockFor(item);
                       return (
                         <NavLink
                           key={item.path}
-                          to={item.path}
+                          to={`/app/${activeWorkspace?.slug || ''}/${item.path}`.replace(/\/+$/, '')}
                           onClick={onNavigate}
+                          title={lockedBy ? `${item.label} requires a plan upgrade (currently ${lockedBy})` : undefined}
                           className={({ isActive }) =>
                             cn(
                               'flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium no-underline transition-colors',
@@ -200,6 +225,9 @@ export function Sidebar({ onOpenCreateWorkspaceModal, onNavigate }) {
                         >
                           <Icon className="h-4 w-4 shrink-0" />
                           <span className="truncate">{item.label}</span>
+                          {lockedBy && (
+                            <Lock className="ml-auto h-3 w-3 shrink-0 text-muted-foreground" aria-label="Requires plan upgrade" />
+                          )}
                         </NavLink>
                       );
                     })}

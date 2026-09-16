@@ -36,22 +36,8 @@ ALTER TABLE public.stripe_webhook_events
 ALTER TABLE public.stripe_webhook_events
   ADD COLUMN IF NOT EXISTS detail TEXT;
 
--- 4. PLAN SEED IDEMPOTENCY (same rows as 002 — safe on restore/re-run)
-INSERT INTO public.subscription_plans (name, display_name, price_monthly, price_annual, limits, features, sort_order) VALUES
-  ('free', 'Free', 0, 0,
-   '{"users": 2, "products": 100, "warehouses": 1, "transactions_per_month": 500, "storage_mb": 100}',
-   '{"basic_reports": true, "csv_export": true, "forecasting": false, "api_access": false, "priority_support": false}',
-   1),
-  ('starter', 'Starter', 29, 290,
-   '{"users": 5, "products": 1000, "warehouses": 2, "transactions_per_month": 5000, "storage_mb": 1000}',
-   '{"basic_reports": true, "csv_export": true, "forecasting": false, "api_access": false, "priority_support": false}',
-   2),
-  ('business', 'Business', 79, 790,
-   '{"users": 25, "products": 10000, "warehouses": 10, "transactions_per_month": 50000, "storage_mb": 10000}',
-   '{"basic_reports": true, "csv_export": true, "forecasting": true, "api_access": true, "priority_support": true}',
-   3),
-  ('enterprise', 'Enterprise', 199, 1990,
-   '{"users": -1, "products": -1, "warehouses": -1, "transactions_per_month": -1, "storage_mb": 100000}',
-   '{"basic_reports": true, "csv_export": true, "forecasting": true, "api_access": true, "priority_support": true, "custom_integrations": true}',
-   4)
-ON CONFLICT (name) DO NOTHING;
+-- 4. PLAN SEEDING (Phase 7b)
+-- Plan rows are NO LONGER hardcoded here. run-migrations.ts seeds
+-- subscription_plans from the PLAN_SEED environment variable (JSON array),
+-- keeping the DB as the single runtime source of truth.
+-- (The previous hardcoded INSERT block was removed from this migration.)

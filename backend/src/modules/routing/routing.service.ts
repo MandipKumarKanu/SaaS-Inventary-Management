@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../../config/supabase.js';
+import { AppError } from '../../shared/errors.js';
 import { InventoryService } from '../inventory/inventory.service.js';
 
 export class RoutingService {
@@ -96,6 +97,6 @@ export class RoutingService {
       };
     }
 
-    throw new Error('No warehouse with available stock found for routing');
+    throw AppError.notFound('No warehouse with available stock found for routing', 'NO_ROUTING_TARGET');
   }
 }

@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { LoadingState } from '@/components/common/DataTable';
+import { ErrorState } from '@/components/common/ErrorState';
 import {
   Card,
   CardHeader,
@@ -52,17 +53,20 @@ export function IntegrationsHubPage() {
   const { activeWorkspace } = useWorkspaceStore();
   const [connections, setConnections] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [syncingProvider, setSyncingProvider] = useState(null);
   const [pendingDisconnect, setPendingDisconnect] = useState(null);
 
   const loadConnections = async () => {
     if (!activeWorkspace) return;
     setIsLoading(true);
+    setError(null);
     try {
       const res = await api.get(`/workspaces/${activeWorkspace.id}/integrations`);
       setConnections(res.data || []);
     } catch (err) {
       console.error('Failed to load integrations:', err);
+      setError(err.message || 'Failed to load integrations');
     } finally {
       setIsLoading(false);
     }
@@ -131,6 +135,8 @@ export function IntegrationsHubPage() {
 
       {isLoading ? (
         <LoadingState message="Loading integrations..." />
+      ) : error ? (
+        <ErrorState description={error} onRetry={loadConnections} />
       ) : (
         <div className="grid gap-5 md:grid-cols-2">
           {INTEGRATION_PROVIDERS.map((prov) => {

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../../config/supabase.js';
+import { AppError } from '../../shared/errors.js';
 
 export class IntegrationService {
   static async listConnections(workspaceId: string) {
@@ -57,7 +58,7 @@ export class IntegrationService {
       .single();
 
     if (!conn || conn.status !== 'active') {
-      throw new Error(`Integration provider '${provider}' is not actively connected`);
+      throw AppError.badRequest(`Integration provider '${provider}' is not actively connected`, 'PROVIDER_NOT_CONNECTED');
     }
 
     // Real reconciliation: report the catalog items and orders actually

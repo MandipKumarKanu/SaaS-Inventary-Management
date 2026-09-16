@@ -6,6 +6,9 @@ import { Mail, MapPin, Phone, Plus, Users } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { PaginationBar } from '@/components/common/PaginationBar';
+import { EmptyState } from '@/components/common/EmptyState';
+import { ErrorState } from '@/components/common/ErrorState';
+import { LoadingState } from '@/components/common/DataTable';
 import { usePagination } from '@/hooks/usePagination';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,18 +17,21 @@ export function CustomersPage() {
   const { activeWorkspace } = useWorkspaceStore();
   const [customers, setCustomers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { page, setPage, pageSize, total, totalPages, applyMeta } = usePagination();
 
   const loadCustomers = async () => {
     if (!activeWorkspace) return;
     setIsLoading(true);
+    setError(null);
     try {
       const res = await api.get(`/workspaces/${activeWorkspace.id}/customers?page=${page}&pageSize=${pageSize}`);
       setCustomers(res.data || []);
       applyMeta(res.meta);
     } catch (err) {
       console.error('Failed to load customers:', err);
+      setError(err.message || 'Failed to load customers');
     } finally {
       setIsLoading(false);
     }
@@ -50,12 +56,20 @@ export function CustomersPage() {
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         {isLoading ? (
-          <div className="col-span-full px-6 py-12 text-center text-sm text-muted-foreground">
-            Loading customer accounts...
+          <div className="col-span-full">
+            <LoadingState message="Loading customer accounts…" />
+          </div>
+        ) : error ? (
+          <div className="col-span-full rounded-xl border border-border bg-card">
+            <ErrorState description={error} onRetry={loadCustomers} />
           </div>
         ) : customers.length === 0 ? (
-          <div className="col-span-full px-6 py-12 text-center text-sm text-muted-foreground">
-            No customer profiles created yet. Click &quot;Add Customer&quot; to start.
+          <div className="col-span-full">
+            <EmptyState
+              icon={Users}
+              title="No customers yet"
+              description="Add your first customer to start creating sales orders."
+            />
           </div>
         ) : (
           customers.map((c) => (

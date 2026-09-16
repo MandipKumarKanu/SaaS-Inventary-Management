@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { withTransaction } from '../../db/pool.js';
 import { StateMachine } from '../../shared/state-machines.js';
 import { DocumentNumberService } from '../../services/document-number.service.js';
+import { GoodsReceiptService } from '../goods_receipts/goods_receipt.service.js';
 import { SerialService } from '../serials/serial.service.js';
 
 export interface POItemInput {
@@ -152,8 +153,10 @@ export class PurchaseService {
     const po = await this.getById(id, workspaceId);
 
     // Phase 4: composite-forward edge to received/partially_received —
-    // receiving moves stock (pre-flight decision #2)
-    StateMachine.assertCanStockTransition('purchase_order', po.status, 'partially_received', userPermissions);
+    // receiving moves stock (pre-flight decision #2). Targeting 'received'
+    // (the furthest forward state) keeps multi-leg deliveries legal: leg 2 of
+    // a partial receipt sees partially_received → received, still forward.
+    StateMachine.assertCanStockTransition('purchase_order', po.status, 'received', userPermissions);
 
     // Fail-fast validation BEFORE any stock change: unknown items,
     // over-receipt, and serial mismatches reject the whole batch (PRD §46, §76).
@@ -192,6 +195,8 @@ export class PurchaseService {
     // Phase 2: ALL receipts commit atomically — a failure mid-batch rolls back
     // every stock movement AND received_qty update (PRD §22). The audit row is
     // written in the same transaction (PRD §41) so it can never be lost.
+    // Phase 8: the GRN number allocated inside the tx is surfaced after commit.
+    let grnNumber = '';
     await withTransaction(async (client) => {
       for (const t of targets) {
         const { item, qtyToReceive, serials: itemSerials } = t;
@@ -229,13 +234,36 @@ export class PurchaseService {
         }
       }
 
+      // Phase 8 (PRD §45): the receipt is a stored DOCUMENT — written inside
+      // the same transaction so it commits/rolls back with the stock it
+      // describes. Idempotent retries (result.duplicate) skip stock but the
+      // receipt documents what the caller REPORTED receiving.
+      grnNumber = await GoodsReceiptService.recordForReceiveTx(client, {
+        workspaceId,
+        purchaseOrderId: id,
+        poNumber: po.po_number,
+        supplierId: po.supplier_id,
+        warehouseId: po.warehouse_id,
+        userId,
+        notes: po.notes || null,
+        targets: targets.map((t) => ({
+          poItemId: t.item.id,
+          productId: t.item.product_id,
+          qtyReceived: t.qtyToReceive,
+          serials: t.serials,
+        })),
+      });
+
       await AuditService.logTx(client, {
         workspaceId,
         userId,
         action: 'po.goods_received',
         entity: 'purchase_order',
         entityId: id,
-        newValue: { received: targets.map((t) => ({ itemId: t.item.id, qty: t.qtyToReceive, serials: t.serials.length > 0 ? t.serials.length : undefined })) },
+        newValue: {
+          goodsReceipt: grnNumber,
+          received: targets.map((t) => ({ itemId: t.item.id, qty: t.qtyToReceive, serials: t.serials.length > 0 ? t.serials.length : undefined })),
+        },
       });
     });
 
@@ -262,6 +290,8 @@ export class PurchaseService {
         .eq('id', id);
     }
 
-    return this.getById(id, workspaceId);
+    const finalPO = await this.getById(id, workspaceId);
+    // Phase 8: latest receipt document surfaced additively in the response
+    return { ...finalPO, goodsReceipt: { grn_number: grnNumber } };
   }
 }

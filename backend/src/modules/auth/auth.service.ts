@@ -177,7 +177,7 @@ export class AuthService {
   /**
    * Update user profile
    */
-  static async updateProfile(userId: string, updates: { name?: string; avatar_url?: string }) {
+  static async updateProfile(userId: string, updates: { name?: string; avatar_url?: string | null }) {
     const { data, error } = await supabaseAdmin
       .from('users')
       .update(updates)

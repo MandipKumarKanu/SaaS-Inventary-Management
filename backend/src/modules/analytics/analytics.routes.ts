@@ -25,7 +25,8 @@ router.get(
   requireFeature('forecasting') as any, // PRD §16: Starter plan rejected server-side
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const days = parseInt(req.query.days as string) || 30;
+      // Clamp: forecast horizon is bounded to keep the query plan sane
+      const days = Math.min(Math.max(parseInt(req.query.days as string, 10) || 30, 7), 365);
       const forecast = await AnalyticsService.getDemandForecast(req.workspace!.id, days);
       res.json({ success: true, data: forecast });
     } catch (err) {

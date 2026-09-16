@@ -2,7 +2,11 @@ import { supabaseAdmin } from '../../config/supabase.js';
 import { AppError } from '../../shared/errors.js';
 import { logger } from '../../config/logger.js';
 import { AuditService } from '../audit/audit.service.js';
-import { DEFAULT_ROLE_PERMISSIONS } from '../../shared/permissions.js';
+import { ConfigService } from '../../services/config.service.js';
+
+// Phase 7b: default role bundles come from the role_templates TABLE (seeded
+// by run-migrations from ROLE_TEMPLATE_SEED) — no hardcoded role→permission
+// record lives in application source anymore.
 
 interface CreateWorkspaceParams {
   name: string;
@@ -74,28 +78,33 @@ export class WorkspaceService {
         });
       }
 
-      // 5. Create trial subscription
-      const { data: freePlan } = await supabaseAdmin
+      // 5. Create trial subscription — plan tier + trial length from config
+      // (config_defaults table → env fallback), never hardcoded tier names.
+      const defaultTier = await ConfigService.getOr<string>('default_plan_tier', 'free');
+      const trialDays = await ConfigService.getOr<number>('trial_days', 14);
+
+      const { data: starterPlan } = await supabaseAdmin
         .from('subscription_plans')
         .select('id, limits')
-        .eq('name', 'free')
-        .single();
+        .eq('name', defaultTier)
+        .maybeSingle();
 
-      if (freePlan) {
+      if (starterPlan) {
         await supabaseAdmin.from('subscriptions').insert({
           workspace_id: workspace.id,
-          plan_id: freePlan.id,
+          plan_id: starterPlan.id,
           status: 'trialing',
-          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days
+          trial_ends_at: new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString(),
         });
 
-        // 6. Initialize usage tracking
-        const limits = freePlan.limits as Record<string, number>;
-        const usageMetrics = [
-          { metric: 'users', limit_value: limits.users || 2 },
-          { metric: 'products', limit_value: limits.products || 100 },
-          { metric: 'warehouses', limit_value: limits.warehouses || 1 },
-        ];
+        // 6. Initialize usage tracking — limits come straight from the plan
+        // row's limits JSONB. No `|| 2` style fallbacks: a plan with a missing
+        // metric gets limit_value 0 (deny-by-default), never a magic number.
+        const limits = (starterPlan.limits as Record<string, number>) || {};
+        const usageMetrics = ['users', 'products', 'warehouses'].map((metric) => ({
+          metric,
+          limit_value: typeof limits[metric] === 'number' ? limits[metric] : 0,
+        }));
 
         await supabaseAdmin.from('usage_records').insert(
           usageMetrics.map(m => ({
@@ -105,6 +114,8 @@ export class WorkspaceService {
             limit_value: m.limit_value,
           }))
         );
+      } else {
+        logger.warn('Default plan tier not found in subscription_plans — workspace created without a subscription', { tier: defaultTier });
       }
 
       // Audit
@@ -127,36 +138,51 @@ export class WorkspaceService {
   }
 
   /**
-   * Create default roles for a workspace
-   * Returns the Owner role ID
+   * Create default roles for a workspace FROM THE role_templates TABLE
+   * (Phase 7b). Returns the owner role id (template with is_owner = TRUE).
+   * Empty/missing templates = no default roles (deployments configure their
+   * own bundles); the workspace still works — roles are manageable via API.
    */
   private static async createDefaultRoles(workspaceId: string): Promise<string | null> {
-    const roleNames = Object.keys(DEFAULT_ROLE_PERMISSIONS);
+    const { data: templates, error: tplError } = await supabaseAdmin
+      .from('role_templates')
+      .select('name, description, is_owner, permissions')
+      .order('sort_order', { ascending: true });
+
+    if (tplError) {
+      logger.error('Failed to load role_templates', { error: tplError.message });
+      return null;
+    }
+    if (!templates || templates.length === 0) {
+      logger.warn('No role_templates configured — skipping default role creation', { workspaceId });
+      return null;
+    }
+
     let ownerRoleId: string | null = null;
 
-    for (const roleName of roleNames) {
+    for (const tpl of templates) {
       const { data: role, error: roleError } = await supabaseAdmin
         .from('roles')
         .insert({
           workspace_id: workspaceId,
-          name: roleName,
-          description: `Default ${roleName} role`,
+          name: tpl.name,
+          description: tpl.description || `Default ${tpl.name} role`,
           is_system: true,
         })
         .select()
         .single();
 
       if (roleError || !role) {
-        logger.error(`Failed to create role: ${roleName}`, { error: roleError?.message });
+        logger.error(`Failed to create role: ${tpl.name}`, { error: roleError?.message });
         continue;
       }
 
-      if (roleName === 'Owner') {
+      if (tpl.is_owner) {
         ownerRoleId = role.id;
       }
 
       // Assign permissions to role
-      const permCodes = DEFAULT_ROLE_PERMISSIONS[roleName];
+      const permCodes: string[] = tpl.permissions || [];
       if (permCodes.length > 0) {
         // Look up permission IDs
         const { data: perms } = await supabaseAdmin

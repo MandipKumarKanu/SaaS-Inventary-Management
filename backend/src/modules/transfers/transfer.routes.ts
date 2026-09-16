@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { TransferService } from './transfer.service.js';
 import { requirePermission } from '../../middleware/permission.middleware.js';
 import { PERMISSIONS } from '../../shared/permissions.js';
+import { parsePagination } from '../../shared/http.js';
 import { z } from 'zod';
 
 const router = Router({ mergeParams: true });
@@ -39,8 +40,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const status = req.query.status as string | undefined;
-      const page = parseInt(req.query.page as string) || undefined;
-      const pageSize = parseInt(req.query.pageSize as string) || undefined;
+      const { page, pageSize } = parsePagination(req.query);
       const result = await TransferService.list(req.workspace!.id, status, { page, pageSize });
       res.json({ success: true, ...result });
     } catch (err) {

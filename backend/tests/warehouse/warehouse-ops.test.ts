@@ -53,6 +53,7 @@ const BOB = userId(2);
 function makeFakeClient(opts: { upsertRows?: any[]; onUpsert?: (n: number, params: any[]) => any[] } = {}) {
   const queries: Array<{ text: string; params: any[] }> = [];
   let upsertCount = 0;
+  let grnCount = 0;
   return {
     queries,
     ledgerInserts() {
@@ -64,6 +65,17 @@ function makeFakeClient(opts: { upsertRows?: any[]; onUpsert?: (n: number, param
 
       if (t.includes('from inventory_transactions') && t.includes('idempotency_key = $2')) {
         return { rows: [], rowCount: 0 };
+      }
+      // Phase 8: goods-receipt document writes (GRN numbering + header/items)
+      if (t.includes('next_document_number')) {
+        grnCount += 1;
+        return { rows: [{ number: `GRN-2026-00000${grnCount}` }], rowCount: 1 };
+      }
+      if (t.trim().toLowerCase().startsWith('insert into goods_receipts')) {
+        return { rows: [{ id: `grn_${grnCount}` }], rowCount: 1 };
+      }
+      if (t.trim().toLowerCase().startsWith('insert into goods_receipt_items')) {
+        return { rows: [], rowCount: 1 };
       }
       // SELECT serial state for lifecycle validation
       if (t.includes('from serial_numbers') && t.includes('select serial_number, status')) {

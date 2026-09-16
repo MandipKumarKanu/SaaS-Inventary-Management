@@ -5,6 +5,7 @@ import { Download, DollarSign, Package, Warehouse, Activity } from 'lucide-react
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatCard } from '@/components/common/StatCard';
 import { LoadingState } from '@/components/common/DataTable';
+import { ErrorState } from '@/components/common/ErrorState';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -13,15 +14,18 @@ export function ReportsCenterPage() {
   const { activeWorkspace } = useWorkspaceStore();
   const [report, setReport] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const loadReport = async () => {
     if (!activeWorkspace) return;
     setIsLoading(true);
+    setError(null);
     try {
       const res = await api.get(`/workspaces/${activeWorkspace.id}/analytics/executive-report`);
       setReport(res.data);
     } catch (err) {
       console.error('Failed to load executive report:', err);
+      setError(err.message || 'Failed to load executive report');
     } finally {
       setIsLoading(false);
     }
@@ -68,6 +72,8 @@ export function ReportsCenterPage() {
 
       {isLoading ? (
         <LoadingState message="Generating executive report..." />
+      ) : error ? (
+        <ErrorState description={error} onRetry={loadReport} />
       ) : (
         <Tabs defaultValue="overview" className="w-full">
           <TabsList>

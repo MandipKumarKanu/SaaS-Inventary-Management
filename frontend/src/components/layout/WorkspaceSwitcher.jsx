@@ -1,3 +1,4 @@
+import { useNavigate, useLocation } from 'react-router';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { Building2, Check, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,18 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ChevronDown } from 'lucide-react';
 
 export function WorkspaceSwitcher({ onOpenCreateModal }) {
-  const { workspaces, activeWorkspace, setActiveWorkspace } = useWorkspaceStore();
+  const { workspaces, activeWorkspace } = useWorkspaceStore();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Phase 9 (PRD §6): switching preserves the destination path —
+  // /app/alpha/products → /app/beta/products. Access is re-checked by
+  // AppLayout (membership) and RouteGuard (permissions) after the swap.
+  const switchTo = (ws) => {
+    const sectionMatch = location.pathname.match(/^\/app\/[^/]+(\/.*)?$/);
+    const rest = sectionMatch?.[1] || '/dashboard';
+    navigate(`/app/${ws.slug}${rest}`);
+  };
 
   return (
     <DropdownMenu>
@@ -35,7 +47,7 @@ export function WorkspaceSwitcher({ onOpenCreateModal }) {
         {workspaces.map((ws) => {
           const active = activeWorkspace?.id === ws.id;
           return (
-            <DropdownMenuItem key={ws.id} onSelect={() => setActiveWorkspace(ws)}>
+            <DropdownMenuItem key={ws.id} onSelect={() => switchTo(ws)}>
               <Building2 className="h-4 w-4 text-muted-foreground" />
               <span className="truncate text-[13px] font-medium">{ws.name}</span>
               {active && <Check className="ml-auto h-3.5 w-3.5 text-primary" />}
@@ -44,6 +56,7 @@ export function WorkspaceSwitcher({ onOpenCreateModal }) {
         })}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onOpenCreateModal} className="text-primary focus:text-primary">
+          {/* create flow returns to the current workspace */}
           <Plus className="h-4 w-4" />
           <span className="text-[13px]">Create Workspace</span>
         </DropdownMenuItem>

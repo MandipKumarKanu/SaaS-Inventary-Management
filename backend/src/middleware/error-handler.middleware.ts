@@ -14,15 +14,23 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ): void {
-  // Zod validation errors
+  // Zod validation errors — field-level detail, 422 Unprocessable Entity
+  // (the request was well-formed JSON, but its contents fail validation).
   if (err instanceof ZodError) {
-    const messages = err.errors.map(e => `${e.path.join('.')}: ${e.message}`);
-    res.status(400).json({
+    const fields: Record<string, string> = {};
+    const messages: string[] = [];
+    for (const issue of err.errors) {
+      const field = issue.path.join('.') || '_root';
+      fields[field] = issue.message;
+      messages.push(`${field}: ${issue.message}`);
+    }
+    res.status(422).json({
       success: false,
       error: {
         code: 'VALIDATION_ERROR',
         message: 'Validation failed',
         details: messages,
+        fields,
       },
     });
     return;

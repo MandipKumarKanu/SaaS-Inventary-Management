@@ -1,8 +1,15 @@
 -- ============================================
--- Seed: Permissions + Subscription Plans
+-- Seed: Permissions catalog
+--
+-- Phase 7b: HARDCODED PLAN ROWS REMOVED. Subscription plans are seeded by
+-- run-migrations.ts from the PLAN_SEED environment variable (JSON array) —
+-- the DB is the runtime source of truth, env only bootstraps it. Same for
+-- role templates (ROLE_TEMPLATE_SEED → role_templates table, migration 019).
 -- ============================================
 
--- Insert all granular permissions
+-- Insert all granular permissions (the DB-driven permission catalog).
+-- Application code references codes via shared/permissions.ts constants but
+-- NEVER declares the catalog itself — this table is authoritative.
 INSERT INTO public.permissions (code, group_name, description) VALUES
   -- Products
   ('products.view', 'products', 'View products'),
@@ -59,23 +66,3 @@ INSERT INTO public.permissions (code, group_name, description) VALUES
   ('billing.view', 'billing', 'View billing information'),
   ('billing.manage', 'billing', 'Manage billing')
 ON CONFLICT (code) DO NOTHING;
-
--- Insert subscription plans
-INSERT INTO public.subscription_plans (name, display_name, price_monthly, price_annual, limits, features, sort_order) VALUES
-  ('free', 'Free', 0, 0,
-   '{"users": 2, "products": 100, "warehouses": 1, "transactions_per_month": 500, "storage_mb": 100}',
-   '{"basic_reports": true, "csv_export": true, "forecasting": false, "api_access": false, "priority_support": false}',
-   1),
-  ('starter', 'Starter', 29, 290,
-   '{"users": 5, "products": 1000, "warehouses": 2, "transactions_per_month": 5000, "storage_mb": 1000}',
-   '{"basic_reports": true, "csv_export": true, "forecasting": false, "api_access": false, "priority_support": false}',
-   2),
-  ('business', 'Business', 79, 790,
-   '{"users": 25, "products": 10000, "warehouses": 10, "transactions_per_month": 50000, "storage_mb": 10000}',
-   '{"basic_reports": true, "csv_export": true, "forecasting": true, "api_access": true, "priority_support": true}',
-   3),
-  ('enterprise', 'Enterprise', 199, 1990,
-   '{"users": -1, "products": -1, "warehouses": -1, "transactions_per_month": -1, "storage_mb": 100000}',
-   '{"basic_reports": true, "csv_export": true, "forecasting": true, "api_access": true, "priority_support": true, "custom_integrations": true}',
-   4)
-ON CONFLICT (name) DO NOTHING;

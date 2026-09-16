@@ -31,6 +31,21 @@ const envSchema = z.object({
   SUPABASE_DB_HOST: z.string().optional(),
   SUPABASE_DB_PASSWORD: z.string().optional(),
   SUPABASE_DB_USER: z.string().optional(),
+
+  // ── Phase 7b: DB-driven configuration (no hardcoded business data) ──
+  // JSON array of plan rows seeded into subscription_plans by run-migrations.
+  // Example: [{"name":"free","display_name":"Free","price_monthly":0,...}]
+  PLAN_SEED: z.string().default(''),
+  // JSON array of role templates: [{"name":"Owner","is_owner":true,"permissions":[...]}]
+  ROLE_TEMPLATE_SEED: z.string().default(''),
+  // Default plan tier assigned to new workspaces (must exist in PLAN_SEED)
+  DEFAULT_PLAN_TIER: z.string().default('free'),
+  // Trial length for new workspaces (days)
+  TRIAL_DAYS: z.string().default('14').transform(Number),
+  // Default variance threshold above which a count needs a second approver (0-100)
+  COUNT_APPROVAL_THRESHOLD_PCT: z.string().default('100').transform(Number),
+  // Batch expiry alert thresholds in days (JSON array)
+  EXPIRY_ALERT_DAYS: z.string().default('[30,14,7,1]'),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -55,6 +55,7 @@ function makeFakeClient(
 ) {
   const queries: Array<{ text: string; params: any[] }> = [];
   let upsertCount = 0;
+  let grnCount = 0;
   return {
     queries,
     lastUpsertParams() {
@@ -69,6 +70,17 @@ function makeFakeClient(
       const t = text.toLowerCase();
       if (t.includes('from inventory_transactions') && t.includes('idempotency_key = $2')) {
         return { rows: opts.idempotencyRows || [], rowCount: (opts.idempotencyRows || []).length };
+      }
+      // Phase 8: goods-receipt document writes (GRN numbering + header/items)
+      if (t.includes('next_document_number')) {
+        grnCount += 1;
+        return { rows: [{ number: `GRN-2026-00000${grnCount}` }], rowCount: 1 };
+      }
+      if (t.trim().toLowerCase().startsWith('insert into goods_receipts')) {
+        return { rows: [{ id: `grn_${grnCount}` }], rowCount: 1 };
+      }
+      if (t.trim().toLowerCase().startsWith('insert into goods_receipt_items')) {
+        return { rows: [], rowCount: 1 };
       }
       if (t.includes('insert into inventory as inv')) {
         upsertCount += 1;

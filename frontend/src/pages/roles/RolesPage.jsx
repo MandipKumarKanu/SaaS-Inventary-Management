@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { LoadingState } from '@/components/common/DataTable';
 import { EmptyState } from '@/components/common/EmptyState';
+import { ErrorState } from '@/components/common/ErrorState';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,16 +18,19 @@ export function RolesPage() {
   const { activeWorkspace } = useWorkspaceStore();
   const [roles, setRoles] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const loadRoles = async () => {
     if (!activeWorkspace) return;
     setIsLoading(true);
+    setError(null);
     try {
       const res = await api.get(`/workspaces/${activeWorkspace.id}/roles`);
       setRoles(res.data || []);
     } catch (err) {
       console.error('Failed to load workspace roles:', err);
+      setError(err.message || 'Failed to load roles');
     } finally {
       setIsLoading(false);
     }
@@ -60,8 +64,13 @@ export function RolesPage() {
 
       {isLoading ? (
         <LoadingState message="Loading roles..." />
+      ) : error ? (
+        <ErrorState description={error} onRetry={loadRoles} />
       ) : roles.length === 0 ? (
-        <EmptyState title="No roles configured yet." />
+        <EmptyState
+          title="No roles configured yet."
+          description="Create a custom role to grant fine-grained permissions to your team."
+        />
       ) : (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {roles.map((role) => (

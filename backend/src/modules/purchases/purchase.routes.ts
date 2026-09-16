@@ -2,6 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { PurchaseService } from './purchase.service.js';
 import { requirePermission } from '../../middleware/permission.middleware.js';
 import { PERMISSIONS } from '../../shared/permissions.js';
+import { parsePagination } from '../../shared/http.js';
+import { GoodsReceiptService } from '../goods_receipts/goods_receipt.service.js';
 import { z } from 'zod';
 
 const router = Router({ mergeParams: true });
@@ -36,8 +38,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const status = req.query.status as string | undefined;
-      const page = parseInt(req.query.page as string) || undefined;
-      const pageSize = parseInt(req.query.pageSize as string) || undefined;
+      const { page, pageSize } = parsePagination(req.query);
       const result = await PurchaseService.list(req.workspace!.id, status, { page, pageSize });
       res.json({ success: true, ...result });
     } catch (err) {
@@ -91,6 +92,23 @@ router.post(
         req.membership?.permissions || [] // Phase 4: state machine re-checks per transition
       );
       res.json({ success: true, data: updated });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Phase 8 (PRD §45): goods receipt documents
+router.get(
+  '/:id/goods-receipts',
+  requirePermission(PERMISSIONS.PURCHASES_VIEW) as any,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const receipts = await GoodsReceiptService.listByPurchaseOrder(
+        req.params.id as string,
+        req.workspace!.id
+      );
+      res.json({ success: true, data: receipts });
     } catch (err) {
       next(err);
     }

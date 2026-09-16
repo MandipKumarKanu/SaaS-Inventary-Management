@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { AppError } from '../shared/errors.js';
 import { AuthenticatedRequest } from '../shared/types.js';
 import { logger } from '../config/logger.js';
+import { PlatformAdminRole, roleHasPermission, PlatformPermission } from '../shared/platform-rbac.js';
 
 const EMAIL_HEADER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -50,6 +51,53 @@ export async function checkIsPlatformAdmin(userId: string, email?: string): Prom
     logger.error('Error checking platform admin status', { error: (err as any)?.message, userId });
   }
   return false;
+}
+
+/**
+ * Resolve a platform admin's role (§38). Env-bootstrapped admins
+ * (PLATFORM_ADMIN_EMAILS) are treated as SUPER_ADMIN; DB rows carry an
+ * explicit role column (migration 021).
+ */
+export async function getPlatformAdminRole(userId: string, email?: string): Promise<PlatformAdminRole | null> {
+  if (!userId) return null;
+  try {
+    const { data: adminRow } = await supabaseAdmin
+      .from('platform_admins')
+      .select('id, role')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (adminRow) return (adminRow.role as PlatformAdminRole) ?? 'SUPER_ADMIN';
+
+    const normalizedEmail = (email || '').toLowerCase();
+    if (normalizedEmail && getEnvAdminEmails().has(normalizedEmail)) {
+      return 'SUPER_ADMIN';
+    }
+  } catch (err) {
+    logger.error('Error resolving platform admin role', { error: (err as any)?.message, userId });
+  }
+  return null;
+}
+
+/**
+ * Per-permission platform authorization (§65, §78). Must run AFTER
+ * requirePlatformAdmin; reads the role resolved and attached by it.
+ */
+export function requirePlatformPermission(permission: PlatformPermission) {
+  return async (req: AuthenticatedRequest, _res: Response, next: NextFunction): Promise<void> => {
+    try {
+      // Per-request resolution — role changes take effect immediately.
+      const role = await getPlatformAdminRole(req.user.id, req.user.email);
+      if (!role || !roleHasPermission(role, permission)) {
+        logger.warn('Platform permission denied', { userId: req.user.id, role, permission });
+        throw AppError.forbidden(`Platform permission required: ${permission}`, 'PLATFORM_PERMISSION_REQUIRED');
+      }
+      (req as AuthenticatedRequest & { platformRole?: PlatformAdminRole }).platformRole = role;
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
 }
 
 /**

@@ -87,6 +87,11 @@ export class StripeWebhookService {
         return this.handleSubscriptionDeleted(event);
       case 'invoice.payment_failed':
         return this.handlePaymentFailed(event);
+      // SaaS Business Layer (§56): persist billing history from Stripe events.
+      case 'invoice.payment_succeeded':
+        return this.handlePaymentSucceeded(event);
+      case 'charge.refunded':
+        return this.handleChargeRefunded(event);
       default:
         return { status: 'ignored', detail: `Unhandled event type: ${event.type}` };
     }
@@ -245,8 +250,82 @@ export class StripeWebhookService {
       })
       .eq('id', row.id);
 
+    // Persist the failed payment for admin billing inspection (§56/§57).
+    const { error: payErr } = await supabaseAdmin.from('payments').upsert(
+      {
+        workspace_id: row.workspace_id,
+        subscription_id: row.id,
+        provider: 'stripe',
+        provider_reference: invoice.id ?? `${invoice.customer}:failed:${event.created}`,
+        amount: (invoice.amount_due ?? 0) / 100,
+        currency: (invoice.currency ?? 'usd').toUpperCase(),
+        status: 'failed',
+        invoice_id: invoice.id ?? null,
+        failure_reason: invoice.last_finalization_error?.message ?? null,
+        metadata: { stripe_event_id: event.id },
+      },
+      { onConflict: 'provider_reference' }
+    );
+    if (payErr) {
+      logger.error('Failed to persist failed-payment row', { error: payErr.message });
+    }
+
     if (error) throw error;
     return { status: 'processed', detail: `workspace ${workspaceId} past_due, grace until ${graceEnd.toISOString()}` };
+  }
+
+  /**
+   * invoice.payment_succeeded (§56): persist a successful payment.
+   * Idempotent via payments.provider_reference UNIQUE (the invoice id) —
+   * Stripe redeliveries never create duplicates.
+   */
+  private static async handlePaymentSucceeded(event: StripeLikeEvent): Promise<ProcessedEventResult> {
+    const invoice = event.data.object as any;
+
+    const { data: row } = await supabaseAdmin
+      .from('subscriptions')
+      .select('id, workspace_id')
+      .eq('stripe_customer_id', invoice.customer)
+      .maybeSingle();
+    if (!row) return { status: 'skipped_stale', detail: 'no subscription for customer' };
+
+    const amount = ((invoice.amount_paid ?? 0) / 100); // Stripe minor units → major
+    const { error } = await supabaseAdmin.from('payments').upsert(
+      {
+        workspace_id: row.workspace_id,
+        subscription_id: row.id,
+        provider: 'stripe',
+        provider_reference: invoice.id,
+        amount,
+        currency: (invoice.currency ?? 'usd').toUpperCase(),
+        status: 'successful',
+        invoice_id: invoice.id,
+        metadata: { stripe_event_id: event.id, billing_reason: invoice.billing_reason ?? null },
+      },
+      { onConflict: 'provider_reference' }
+    );
+    if (error) throw error;
+    return { status: 'processed', detail: `payment recorded for workspace ${row.workspace_id}` };
+  }
+
+  /** charge.refunded (§56): mark the matching payment refunded. */
+  private static async handleChargeRefunded(event: StripeLikeEvent): Promise<ProcessedEventResult> {
+    const charge = event.data.object as any;
+    const reference = charge.invoice ?? charge.id; // prefer invoice linkage
+
+    const { data: payment } = await supabaseAdmin
+      .from('payments')
+      .select('id')
+      .or(`provider_reference.eq.${reference},provider_reference.eq.${charge.id}`)
+      .maybeSingle();
+    if (!payment) return { status: 'skipped_stale', detail: 'no payment row for charge' };
+
+    const { error } = await supabaseAdmin
+      .from('payments')
+      .update({ status: 'refunded', updated_at: new Date().toISOString() })
+      .eq('id', payment.id);
+    if (error) throw error;
+    return { status: 'processed', detail: 'payment marked refunded' };
   }
 
   /** Map Stripe subscription status → our status enum. */

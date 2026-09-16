@@ -1,4 +1,6 @@
 import { supabaseAdmin } from '../../config/supabase.js';
+import { AppError } from '../../shared/errors.js';
+import { logger } from '../../config/logger.js';
 import { InventoryService } from '../inventory/inventory.service.js';
 
 export class ExternalApiService {
@@ -13,7 +15,8 @@ export class ExternalApiService {
       .range(offset, offset + limit - 1)
       .order('name', { ascending: true });
 
-    if (error) throw new Error(error.message);
+    if (error) throw AppError.internal('Failed to list products', 'EXTERNAL_API_DB_ERROR');
+
     return { products: data, total: count };
   }
 
@@ -42,7 +45,7 @@ export class ExternalApiService {
       `)
       .eq('workspace_id', workspaceId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw AppError.internal('Failed to list inventory', 'EXTERNAL_API_DB_ERROR');
 
     return (data || []).map((row: any) => ({
       id: row.id,
@@ -101,7 +104,7 @@ export class ExternalApiService {
       .limit(1)
       .single();
 
-    if (!warehouse) throw new Error('No warehouse found for order fulfillment');
+    if (!warehouse) throw AppError.unprocessable('No warehouse available for order fulfillment', 'NO_WAREHOUSE');
 
     // 3. Resolve products and build items
     const orderItems: any[] = [];
@@ -116,7 +119,7 @@ export class ExternalApiService {
         .single();
 
       if (!prod) {
-        throw new Error(`Product with SKU ${item.sku} not found`);
+        throw AppError.notFound(`Product with SKU ${item.sku} not found`, 'PRODUCT_NOT_FOUND');
       }
 
       const itemTotal = item.quantity * item.unit_price;
@@ -148,7 +151,14 @@ export class ExternalApiService {
       .select()
       .single();
 
-    if (soErr || !salesOrder) throw new Error(soErr?.message || 'Failed to create sales order');
+    if (soErr || !salesOrder) {
+      logger.error('External order ingestion failed to create SO', {
+        workspaceId,
+        external_order_id: orderPayload.external_order_id,
+        error: soErr?.message,
+      });
+      throw AppError.internal('Failed to create sales order', 'EXTERNAL_ORDER_FAILED');
+    }
 
     // Insert order items
     const itemsToInsert = orderItems.map((it) => ({

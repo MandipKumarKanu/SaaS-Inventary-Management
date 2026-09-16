@@ -1,4 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
+import { ConfigService } from './config.service.js';
+import { SubscriptionService } from '../modules/billing/subscription.service.js';
+import { logger } from '../config/logger.js';
 
 export class BackgroundWorkerService {
   private static isRunning = false;
@@ -31,6 +34,91 @@ export class BackgroundWorkerService {
     await this.runReorderCheckJob();
     await this.runFEFOExpirationCheckJob();
     await this.runExpirationAlertsJob();
+    // SaaS Business Layer (§16): lifecycle jobs — all idempotent, safe to re-run.
+    await this.runTrialExpirationJob();
+    await this.runSubscriptionExpirationJob();
+    await this.runCouponExpirationJob();
+  }
+
+  /**
+   * §13/§16: expire finished trials (dev-mode subscriptions; Stripe-managed
+   * ones are owned by webhooks). Idempotent: only rows still `trialing` with
+   * a past trial_ends_at are touched, and the update guards on status.
+   */
+  private static async runTrialExpirationJob() {
+    const jobName = 'CRON_TRIAL_EXPIRATION';
+    try {
+      const processed = await SubscriptionService.expireTrials();
+      await supabaseAdmin.from('background_job_logs').insert({
+        job_name: jobName,
+        status: 'success',
+        details: { trials_expired: processed },
+      });
+    } catch (err: any) {
+      logger.error('Trial expiration job failed', { error: err.message });
+      await supabaseAdmin.from('background_job_logs').insert({
+        job_name: jobName,
+        status: 'failed',
+        details: { error: err.message },
+      });
+    }
+  }
+
+  /**
+   * §14/§15/§16: period-end processing — scheduled cancels → cancelled,
+   * everything else → past_due with grace; then grace expiry → cancelled.
+   * Idempotent via status-guarded updates.
+   */
+  private static async runSubscriptionExpirationJob() {
+    const jobName = 'CRON_SUBSCRIPTION_EXPIRATION';
+    try {
+      const processedPeriods = await SubscriptionService.processPeriodEnds();
+      const expiredGrace = await SubscriptionService.expireGracePeriods();
+      await supabaseAdmin.from('background_job_logs').insert({
+        job_name: jobName,
+        status: 'success',
+        details: { periods_processed: processedPeriods, grace_periods_expired: expiredGrace },
+      });
+    } catch (err: any) {
+      logger.error('Subscription expiration job failed', { error: err.message });
+      await supabaseAdmin.from('background_job_logs').insert({
+        job_name: jobName,
+        status: 'failed',
+        details: { error: err.message },
+      });
+    }
+  }
+
+  /**
+   * §30: mark expired coupons inactive. Validation never depends on this job
+   * (timestamps are checked at redemption time) — this is hygiene for admin
+   * listings and dashboards.
+   */
+  private static async runCouponExpirationJob() {
+    const jobName = 'CRON_COUPON_EXPIRATION';
+    try {
+      const nowIso = new Date().toISOString();
+      const { data: expired, error } = await supabaseAdmin
+        .from('coupons')
+        .update({ active: false, updated_at: nowIso })
+        .eq('active', true)
+        .not('expires_at', 'is', null)
+        .lt('expires_at', nowIso)
+        .select('id');
+      if (error) throw error;
+      await supabaseAdmin.from('background_job_logs').insert({
+        job_name: jobName,
+        status: 'success',
+        details: { coupons_expired: expired?.length ?? 0 },
+      });
+    } catch (err: any) {
+      logger.error('Coupon expiration job failed', { error: err.message });
+      await supabaseAdmin.from('background_job_logs').insert({
+        job_name: jobName,
+        status: 'failed',
+        details: { error: err.message },
+      });
+    }
   }
 
   private static async runReorderCheckJob() {
@@ -88,18 +176,20 @@ export class BackgroundWorkerService {
     try {
       const today = new Date().toISOString().slice(0, 10); // DATE comparison
 
-      // Thresholds per workspace (default 30/14/7/1 days, PRD §33)
+      // Thresholds: deployment default from config_defaults → env (Phase 7b),
+      // overridable per workspace via workspaces.settings.expiry_alert_days
       const { data: workspaces, error: wsErr } = await supabaseAdmin
         .from('workspaces')
         .select('id, settings');
       if (wsErr) throw wsErr;
 
+      const defaultThresholds = await ConfigService.getOr<number[]>('expiry_alert_days', [30, 14, 7, 1]);
       let alertsGenerated = 0;
 
       for (const ws of workspaces || []) {
         const thresholds: number[] = Array.isArray((ws.settings as any)?.expiry_alert_days)
           ? (ws.settings as any).expiry_alert_days
-          : [30, 14, 7, 1];
+          : defaultThresholds;
 
         // Furthest horizon limits the scan window
         const horizonDays = Math.max(...thresholds, 0);

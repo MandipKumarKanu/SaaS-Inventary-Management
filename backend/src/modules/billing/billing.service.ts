@@ -3,6 +3,7 @@ import { AppError } from '../../shared/errors.js';
 import { PlanCatalogService, Plan, PlanLimits } from '../../services/plan-catalog.service.js';
 import { UsageService, UsageMetric } from '../../services/usage.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { ConfigService } from '../../services/config.service.js';
 
 /**
  * Phase 3: billing is now DB-driven truth (PRD §15, Rule #8/#9).
@@ -33,10 +34,12 @@ export class BillingService {
       plan = await PlanCatalogService.getPlanById(sub.plan_id);
     }
 
-    // Defensive: a workspace without a subscription row gets the free plan.
-    // (workspace creation inserts one; this only fires on tampered data)
+    // Defensive: a workspace without a subscription row gets the configured
+    // default tier (Phase 7b — no hardcoded tier name).
+    let defaultTier = 'free';
     if (!sub) {
-      plan = await PlanCatalogService.getPlanByName('free');
+      defaultTier = await ConfigService.getOr<string>('default_plan_tier', 'free');
+      plan = await PlanCatalogService.getPlanByName(defaultTier);
     }
 
     const usage = await UsageService.getUsage(workspaceId, SUMMARY_METRICS);
@@ -50,8 +53,8 @@ export class BillingService {
 
     return {
       planId: plan?.id ?? null,
-      plan_tier: plan?.name ?? 'free',
-      plan_display_name: plan?.displayName ?? 'Free',
+      plan_tier: plan?.name ?? defaultTier,
+      plan_display_name: plan?.displayName ?? defaultTier,
       status: sub?.status ?? 'trialing',
       billing_interval: sub?.billing_interval ?? 'monthly',
       price_monthly: plan?.priceMonthly ?? 0,
@@ -65,10 +68,10 @@ export class BillingService {
       // Limits in BOTH shapes: raw DB limits and the max* keys the UI reads.
       rawLimits: plan?.limits ?? null,
       limits: {
-        maxUsers: plan?.limits.users ?? -1,
-        maxProducts: plan?.limits.products ?? -1,
-        maxWarehouses: plan?.limits.warehouses ?? -1,
-        maxTransactionsPerMonth: plan?.limits.transactions_per_month ?? -1,
+        maxUsers: plan?.limits?.users ?? -1,
+        maxProducts: plan?.limits?.products ?? -1,
+        maxWarehouses: plan?.limits?.warehouses ?? -1,
+        maxTransactionsPerMonth: plan?.limits?.transactions_per_month ?? -1,
       },
       usage: usageMap,
       transactions_this_month: byMetric.transactions_per_month?.current ?? 0,

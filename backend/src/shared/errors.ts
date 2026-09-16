@@ -40,6 +40,14 @@ export class AppError extends Error {
     return new AppError(message, 409, code);
   }
 
+  /**
+   * 422 Unprocessable Entity — the request is well-formed JSON, but its
+   * contents fail a business rule / validation that isn't structural.
+   */
+  static unprocessable(message: string, code: string = 'UNPROCESSABLE') {
+    return new AppError(message, 422, code);
+  }
+
   static tooMany(message: string = 'Too many requests', code: string = 'RATE_LIMIT') {
     return new AppError(message, 429, code);
   }

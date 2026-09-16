@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { InventoryService } from './inventory.service.js';
 import { requirePermission } from '../../middleware/permission.middleware.js';
 import { PERMISSIONS } from '../../shared/permissions.js';
+import { parsePagination } from '../../shared/http.js';
 import { z } from 'zod';
 
 const router = Router({ mergeParams: true });
@@ -60,8 +61,7 @@ router.get(
   requirePermission(PERMISSIONS.INVENTORY_VIEW) as any,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const page = parseInt(req.query.page as string) || 1;
-      const pageSize = parseInt(req.query.pageSize as string) || 25;
+      const { page, pageSize } = parsePagination(req.query);
       const productId = req.query.productId as string;
       const warehouseId = req.query.warehouseId as string;
       const movementType = req.query.movementType as string;

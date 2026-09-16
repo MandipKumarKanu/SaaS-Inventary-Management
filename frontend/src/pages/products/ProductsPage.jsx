@@ -96,9 +96,9 @@ export function ProductsPage() {
           <>
             <TableHead>Product Details</TableHead>
             <TableHead>SKU / Barcode</TableHead>
-            <TableHead>Category</TableHead>
+            <TableHead className="hidden md:table-cell">Category</TableHead>
             <TableHead>Cost / Selling Price</TableHead>
-            <TableHead>Reorder Point</TableHead>
+            <TableHead className="hidden md:table-cell">Reorder Point</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </>
         }
@@ -137,7 +137,7 @@ export function ProductsPage() {
                 )}
               </div>
             </TableCell>
-            <TableCell>
+            <TableCell className="hidden md:table-cell">
               {p.category ? (
                 <Badge variant="secondary" className="normal-case">
                   <Tag className="h-2.5 w-2.5" />
@@ -153,7 +153,7 @@ export function ProductsPage() {
                 <span className="ml-1.5 text-[11px] text-muted-foreground">(Cost: ${parseFloat(p.cost_price).toFixed(2)})</span>
               </div>
             </TableCell>
-            <TableCell>
+            <TableCell className="hidden md:table-cell">
               <Badge variant="warning">
                 <span>{p.reorder_point} {p.unit}</span>
               </Badge>

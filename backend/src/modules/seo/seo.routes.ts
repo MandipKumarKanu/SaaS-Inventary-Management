@@ -74,10 +74,10 @@ router.post('/indexnow/submit', async (req: Request, res: Response, next: NextFu
     ) as string[];
 
     if (urls.length === 0 || urls.length > 100) {
-      res.status(400).json({
+      res.status(422).json({
         success: false,
         error: {
-          code: 'INVALID_URLS',
+          code: 'VALIDATION_ERROR',
           message: 'Provide 1–100 absolute URLs via { urls: [...] }. Stream submits; avoid batches.',
         },
       });

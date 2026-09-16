@@ -2,23 +2,25 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { ExternalApiService } from './external_api.service.js';
 import { APIKeyService } from '../api_keys/api_key.service.js';
 import { requireFeature } from '../../middleware/feature.middleware.js';
+import { AppError } from '../../shared/errors.js';
 import { z } from 'zod';
 
 const router = Router();
 
-// Middleware to authenticate X-API-Key header
-const authenticateApiKey = async (req: Request, res: Response, next: NextFunction) => {
+// Middleware to authenticate X-API-Key header.
+// All failures go through the central error handler (401 envelope with a
+// machine-readable code) — no raw error messages are echoed to the client.
+const authenticateApiKey = async (req: Request, _res: Response, next: NextFunction) => {
   try {
     const apiKey = (req.headers['x-api-key'] || req.headers['authorization']?.replace('Bearer ', '')) as string;
     if (!apiKey) {
-      res.status(401).json({ success: false, error: { message: 'X-API-Key header required' } });
-      return;
+      throw AppError.unauthorized('X-API-Key header required', 'API_KEY_REQUIRED');
     }
     const authData = await APIKeyService.verifyKey(apiKey);
     (req as any).workspaceId = authData.workspaceId;
     next();
-  } catch (err: any) {
-    res.status(401).json({ success: false, error: { message: err.message || 'Unauthorized API Key' } });
+  } catch (err) {
+    next(err);
   }
 };
 

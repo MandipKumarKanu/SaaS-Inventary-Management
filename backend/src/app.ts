@@ -28,6 +28,7 @@ import { serialRoutes } from './modules/serials/serial.routes.js';
 import { supplierRoutes } from './modules/suppliers/supplier.routes.js';
 import { customerRoutes } from './modules/customers/customer.routes.js';
 import { purchaseRoutes } from './modules/purchases/purchase.routes.js';
+import { goodsReceiptRoutes } from './modules/goods_receipts/goods_receipt.routes.js';
 import { salesRoutes } from './modules/sales/sales.routes.js';
 import { returnRoutes } from './modules/returns/return.routes.js';
 import { reorderRoutes } from './modules/reorder/reorder.routes.js';
@@ -193,6 +194,7 @@ function wsRouterUse() {
   wsRouter.use('/suppliers', supplierRoutes);
   wsRouter.use('/customers', customerRoutes);
   wsRouter.use('/purchases', purchaseRoutes);
+  wsRouter.use('/goods-receipts', goodsReceiptRoutes);
   wsRouter.use('/sales', salesRoutes);
   wsRouter.use('/returns', returnRoutes);
   wsRouter.use('/reorder', reorderRoutes);
@@ -229,6 +231,18 @@ api.use('/seo', seoRoutes);
 // Mount API
 app.use('/api/v1', api);
 app.use('/v1', api);
+
+// ============================================
+// 404 catch-all (must come after all routes, before the error handler)
+// Unmatched routes get the standard error envelope instead of an HTML error
+// page — API clients can rely on a consistent shape for every response.
+// ============================================
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: { code: 'NOT_FOUND', message: `Route ${req.method} ${req.originalUrl} not found` },
+  });
+});
 
 // ============================================
 // Error handling (must be last)

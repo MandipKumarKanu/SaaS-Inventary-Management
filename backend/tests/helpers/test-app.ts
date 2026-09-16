@@ -16,6 +16,7 @@ import { serialRoutes } from '../../src/modules/serials/serial.routes';
 import { salesRoutes } from '../../src/modules/sales/sales.routes';
 import { warehouseRoutes } from '../../src/modules/warehouses/warehouse.routes';
 import { purchaseRoutes } from '../../src/modules/purchases/purchase.routes';
+import { goodsReceiptRoutes } from '../../src/modules/goods_receipts/goods_receipt.routes';
 import { adminRoutes } from '../../src/modules/admin/admin.routes';
 import { monitoringRoutes } from '../../src/modules/monitoring/monitoring.routes';
 import { webhookRoutes, stripeWebhookRouter } from '../../src/modules/webhooks/webhook.routes';
@@ -60,6 +61,7 @@ export function buildTestApp(): Express {
   wsRouter.use('/transfers', transferRoutes);
   wsRouter.use('/warehouses', warehouseRoutes);
   wsRouter.use('/purchases', purchaseRoutes);
+  wsRouter.use('/goods-receipts', goodsReceiptRoutes);
   wsRouter.use('/sales', salesRoutes);
   wsRouter.use('/counts', countRoutes);
   wsRouter.use('/batches', batchRoutes);

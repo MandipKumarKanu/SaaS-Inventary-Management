@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { withTransaction } from '../../db/pool.js';
 import { StateMachine } from '../../shared/state-machines.js';
 import { DocumentNumberService } from '../../services/document-number.service.js';
+import { ConfigService } from '../../services/config.service.js';
 
 export interface CreateCountDTO {
   workspaceId: string;
@@ -21,10 +22,11 @@ export interface PhysicalCountEntry {
 
 export class CountService {
   /**
-   * Approval threshold from workspace settings (PRD §35).
+   * Approval threshold from workspace settings (PRD §35), falling back to
+   * the deployment default in config_defaults → env (Phase 7b). Workspace
+   * override wins; no hardcoded percentage in feature code.
    * Variances (in % of system qty) above this require a SECOND approver
-   * (four-eyes: approver !== submitter). Default 100 = any variance up to
-   * 100% passes with a single approver.
+   * (four-eyes: approver !== submitter).
    */
   static async getApprovalThresholdPct(workspaceId: string): Promise<number> {
     const { data } = await supabaseAdmin
@@ -33,7 +35,8 @@ export class CountService {
       .eq('id', workspaceId)
       .single();
     const pct = (data?.settings as any)?.count_approval_threshold_pct;
-    return typeof pct === 'number' && pct >= 0 && pct <= 100 ? pct : 100;
+    if (typeof pct === 'number' && pct >= 0 && pct <= 100) return pct;
+    return ConfigService.getOr<number>('count_approval_threshold_pct', 100);
   }
 
   static async list(workspaceId: string, status?: string, queryParams?: { page?: number; pageSize?: number }) {

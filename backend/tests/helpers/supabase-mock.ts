@@ -101,9 +101,10 @@ export function makeDb() {
       }
 
       // Forward relation: FK column on this row. PostgREST uses real FKs;
-      // we approximate with `<table>_id` and the singularized form
+      // we approximate with `<alias>_id` (e.g. plan:subscription_plans →
+      // plan_id), `<table>_id`, and the singularized form
       // (permissions -> permission_id, roles -> role_id, categories -> category_id).
-      const fkCandidates = [`${relTable}_id`, `${relTable.replace(/s$/, '')}_id`];
+      const fkCandidates = [`${alias}_id`, `${relTable}_id`, `${relTable.replace(/s$/, '')}_id`];
       const fk = fkCandidates.find((c) => c in row && row[c] != null);
       if (fk) {
         const target = getTable(relTable).find((r2) => r2.id === row[fk]);
@@ -331,6 +332,18 @@ export function makeDb() {
           count++;
         }
         const project = (r: Row) => resolveSelect(r, this._select);
+        // supabase-js semantics: .single()/.maybeSingle() after an update
+        // project to one object (PostgREST vnd.pgrst.object), and .single()
+        // errors when nothing matched.
+        if (this._single) {
+          if (rows.length === 0) {
+            return { data: null, error: { code: 'PGRST116', message: 'No rows found' }, count: 0, status: 406 };
+          }
+          return { data: project(rows[0]), error: null, count: 1, status: 200 };
+        }
+        if (this._maybe) {
+          return { data: rows.length > 0 ? project(rows[0]) : null, error: null, count: rows.length, status: 200 };
+        }
         return { data: rows.map(project), error: null, count, status: 200 };
       }
 

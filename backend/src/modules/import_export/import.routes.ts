@@ -7,6 +7,8 @@ import { z } from 'zod';
 const router = Router({ mergeParams: true });
 
 const importProductsSchema = z.object({
+  // Phase 8 (PRD §43): dry-run preview — run every check, write nothing.
+  mode: z.enum(['validate', 'commit']).default('commit'),
   rows: z.array(
     z.object({
       name: z.string().min(1),
@@ -25,11 +27,12 @@ router.post(
   requirePermission(PERMISSIONS.PRODUCTS_CREATE) as any,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { rows } = importProductsSchema.parse(req.body);
+      const { rows, mode } = importProductsSchema.parse(req.body);
       const result = await ImportService.importProducts(
         req.workspace!.id,
         rows,
-        req.user!.id
+        req.user!.id,
+        mode
       );
       res.json({ success: true, data: result });
     } catch (err) {

@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../../config/supabase.js';
 import { PERMISSIONS } from '../../shared/permissions.js';
 import { requirePermission } from '../../middleware/permission.middleware.js';
+import { parsePagination } from '../../shared/http.js';
 
 const router = Router();
 
@@ -14,8 +15,7 @@ router.get(
   requirePermission(PERMISSIONS.SETTINGS_VIEW) as any,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const page = parseInt(req.query.page as string) || 1;
-      const pageSize = Math.min(parseInt(req.query.pageSize as string) || 25, 100);
+      const { page, pageSize } = parsePagination(req.query);
       const action = req.query.action as string;
       const entity = req.query.entity as string;
 

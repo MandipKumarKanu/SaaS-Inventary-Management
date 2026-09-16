@@ -61,7 +61,8 @@ describe('Permission boundaries (PRD §11–§13)', () => {
       .post('/api/v1/workspaces/alpha/products')
       .set('Authorization', `Bearer ${aliceToken}`)
       .send({ name: '', sku: '' });
-    expect(res.status).toBe(400);
+    // Backend audit: well-formed JSON that fails field validation → 422
+    expect(res.status).toBe(422);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 

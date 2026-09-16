@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { AppError } from '../shared/errors.js';
+import { logger } from '../config/logger.js';
 import { PlanCatalogService, PlanLimits } from './plan-catalog.service.js';
 
 /**
@@ -129,7 +130,7 @@ export class UsageService {
         { onConflict: 'workspace_id,metric' }
       );
     } catch (err: any) {
-      console.error('Failed to refresh usage cache', { workspaceId, metric, error: err.message });
+      logger.warn('Failed to refresh usage cache', { workspaceId, metric, error: err.message });
     }
   }
 
