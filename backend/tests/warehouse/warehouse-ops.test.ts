@@ -458,7 +458,9 @@ describe('FEFO consumption in SO fulfillment', () => {
         so_number: 'SO-000001',
         customer_id: 'cust-1',
         warehouse_id: 'wh-1',
-        status: 'confirmed',
+        // Phase 7: fulfillment ships from reserved/picking/packed only —
+        // 'confirmed' must reserve first, so seed past the reservation gate.
+        status: 'reserved',
         subtotal: 100,
         total_amount: 100,
         created_by: ALICE,

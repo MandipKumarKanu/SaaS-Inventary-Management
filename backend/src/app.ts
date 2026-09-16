@@ -228,6 +228,7 @@ api.use('/seo', seoRoutes);
 
 // Mount API
 app.use('/api/v1', api);
+app.use('/v1', api);
 
 // ============================================
 // Error handling (must be last)

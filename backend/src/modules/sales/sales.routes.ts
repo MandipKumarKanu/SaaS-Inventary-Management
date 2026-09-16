@@ -68,6 +68,34 @@ router.post(
   }
 );
 
+// Phase 7 (PRD §31): server-generated picking list — printable-ready JSON
+router.get(
+  '/:id/picking-list',
+  requirePermission(PERMISSIONS.SALES_VIEW) as any,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await SalesService.getPickingList(req.params.id as string, req.workspace!.id);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Phase 7 (PRD §31): server-generated packing slip
+router.get(
+  '/:id/packing-slip',
+  requirePermission(PERMISSIONS.SALES_VIEW) as any,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await SalesService.getPackingSlip(req.params.id as string, req.workspace!.id);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 router.post(
   '/:id/fulfill',
   requirePermission(PERMISSIONS.SALES_FULFILL) as any,

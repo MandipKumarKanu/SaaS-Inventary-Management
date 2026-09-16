@@ -6,6 +6,8 @@ import { withTransaction } from '../../db/pool.js';
 import { StateMachine } from '../../shared/state-machines.js';
 import { DocumentNumberService } from '../../services/document-number.service.js';
 import { FefoService } from '../../services/fefo.service.js';
+import { ReservationService } from '../../services/reservation.service.js';
+import { logger } from '../../config/logger.js';
 
 export interface SOItemInput {
   productId: string;
@@ -56,6 +58,81 @@ export class SalesService {
 
     if (error || !data) throw AppError.notFound('Sales Order not found');
     return data;
+  }
+
+  /**
+   * Server-generated picking list (PRD §31). Status-gated to picking/packed:
+   * picking before reservation makes no sense — the hold must exist first.
+   */
+  static async getPickingList(id: string, workspaceId: string) {
+    const so = await this.getById(id, workspaceId);
+    if (!['picking', 'packed'].includes(so.status)) {
+      throw AppError.badRequest(
+        `Picking list requires status 'picking' or 'packed' (currently '${so.status}') — reserve the order first`,
+        'PICKING_NOT_ALLOWED'
+      );
+    }
+
+    // Bin locations from the inventory rows at the fulfillment warehouse
+    const { data: invRows } = await supabaseAdmin
+      .from('inventory')
+      .select('product_id, location_id')
+      .eq('workspace_id', workspaceId)
+      .eq('warehouse_id', so.warehouse_id);
+    const locationByProduct = new Map<string, any>();
+    for (const r of invRows || []) {
+      if (!r.location_id || locationByProduct.has(r.product_id)) continue;
+      const { data: loc } = await supabaseAdmin
+        .from('warehouse_locations')
+        .select('code, zone, rack, shelf, bin')
+        .eq('id', r.location_id)
+        .maybeSingle();
+      locationByProduct.set(r.product_id, loc || null);
+    }
+
+    return {
+      so_number: so.so_number,
+      warehouse: so.warehouse,
+      status: so.status,
+      lines: so.items.map((it: any) => ({
+        item_id: it.id,
+        sku: it.product?.sku,
+        name: it.product?.name,
+        ordered_qty: it.ordered_qty,
+        fulfilled_qty: it.fulfilled_qty || 0,
+        qty_to_pick: it.ordered_qty - (it.fulfilled_qty || 0),
+        location: locationByProduct.get(it.product_id) || null,
+      })),
+    };
+  }
+
+  /**
+   * Server-generated packing slip (PRD §31). Available from 'picking'
+   * onward (picking, packed, shipped) — quantities reflect fulfillment state.
+   */
+  static async getPackingSlip(id: string, workspaceId: string) {
+    const so = await this.getById(id, workspaceId);
+    if (!['picking', 'packed', 'shipped'].includes(so.status)) {
+      throw AppError.badRequest(
+        `Packing slip requires status 'picking', 'packed' or 'shipped' (currently '${so.status}')`,
+        'PACKING_NOT_ALLOWED'
+      );
+    }
+
+    return {
+      so_number: so.so_number,
+      customer: so.customer,
+      shipping_address: so.shipping_address,
+      warehouse: so.warehouse,
+      status: so.status,
+      lines: so.items.map((it: any) => ({
+        sku: it.product?.sku,
+        name: it.product?.name,
+        ordered_qty: it.ordered_qty,
+        shipped_qty: it.fulfilled_qty || 0,
+      })),
+      notes: so.notes || null,
+    };
   }
 
   static async createSO(dto: CreateSODTO) {
@@ -112,11 +189,62 @@ export class SalesService {
     return this.getById(so.id, dto.workspaceId);
   }
 
+  /**
+   * Status pipeline WITH stock side effects (Phase 7, PRD §30):
+   *   - confirmed → reserved: RESERVES stock for every item (all-or-nothing)
+   *   - → cancelled: RELEASES any active reservations first
+   *   - picking/packed: metadata only (warehouse floor states)
+   */
   static async updateStatus(id: string, workspaceId: string, newStatus: string, userId: string, userPermissions: string[] = []) {
     const so = await this.getById(id, workspaceId);
 
     // Phase 4: state machine gate — no arbitrary status jumps (PRD §76)
     StateMachine.assertCanTransition('sales_order', so.status, newStatus, userPermissions);
+
+    // Stock side effects run in ONE transaction; the status flip follows it.
+    if (newStatus === 'reserved') {
+      // Reserve remaining qty for EVERY item — all-or-nothing (decision #1).
+      await withTransaction(async (client) => {
+        for (const item of so.items) {
+          const outstanding = item.ordered_qty - (item.fulfilled_qty || 0);
+          if (outstanding <= 0) continue;
+          await ReservationService.reserveForOrderItem(client, {
+            workspaceId,
+            soId: id,
+            soItemId: item.id,
+            productId: item.product_id,
+            variantId: item.variant_id || undefined,
+            warehouseId: so.warehouse_id,
+            qty: outstanding,
+            userId,
+          });
+        }
+
+        await AuditService.logTx(client, {
+          workspaceId,
+          userId,
+          action: 'so.reserved',
+          entity: 'sales_order',
+          entityId: id,
+          previousValue: { status: so.status },
+          newValue: { status: newStatus, items: so.items.length },
+        });
+      });
+    } else if (newStatus === 'cancelled') {
+      // Release holds BEFORE the status flip — releasing is the point of cancelling
+      await withTransaction(async (client) => {
+        await ReservationService.releaseForOrder(client, { workspaceId, soId: id, userId });
+        await AuditService.logTx(client, {
+          workspaceId,
+          userId,
+          action: 'so.cancelled',
+          entity: 'sales_order',
+          entityId: id,
+          previousValue: { status: so.status },
+          newValue: { status: newStatus },
+        });
+      });
+    }
 
     const { data: updated, error } = await supabaseAdmin
       .from('sales_orders')
@@ -128,22 +256,32 @@ export class SalesService {
 
     if (error) throw error;
 
-    await AuditService.log({
-      workspaceId,
-      userId,
-      action: `so.${newStatus}`,
-      entity: 'sales_order',
-      entityId: id,
-      previousValue: { status: so.status },
-      newValue: { status: newStatus },
-    });
+    // Non-stock transitions still get a plain audit row
+    if (newStatus !== 'reserved' && newStatus !== 'cancelled') {
+      await AuditService.log({
+        workspaceId,
+        userId,
+        action: `so.${newStatus}`,
+        entity: 'sales_order',
+        entityId: id,
+        previousValue: { status: so.status },
+        newValue: { status: newStatus },
+      });
+    }
 
     return this.getById(id, workspaceId);
-  }  static async fulfillOrder(id: string, workspaceId: string, userId: string, userPermissions: string[] = []) {
+  }
+
+  /**
+   * Fulfillment CONVERTS reservations into deductions (Phase 7, PRD §30).
+   * The reservation step is non-skippable — status must be past 'reserved'.
+   * Legacy SOs without reservation rows fall back to direct deduction with a
+   * logged warning (no dead end for pre-Phase-7 data).
+   */
+  static async fulfillOrder(id: string, workspaceId: string, userId: string, userPermissions: string[] = []) {
     const so = await this.getById(id, workspaceId);
 
-    // Phase 4: composite-forward edge — fulfillment walks the forward path to
-    // 'shipped' in one stock-moving operation (pre-flight decision #2).
+    // Phase 4/7: stock gate — only reserved/picking/packed may ship.
     StateMachine.assertCanStockTransition('sales_order', so.status, 'shipped', userPermissions);
 
     // Phase 6 (PRD §33): resolve FEFO consumption BEFORE opening the
@@ -163,13 +301,36 @@ export class SalesService {
       }
     }
 
-    // Deduct stock for all items via Central Inventory Engine.
-    // Phase 2: ALL shipments commit atomically (PRD §22); the audit row is
-    // written in the same transaction (PRD §41).
+    // Lock active reservations first (convert path reads them in-tx)
+    let reservationsByItem = new Map<string, any>();
     await withTransaction(async (client) => {
+      reservationsByItem = await ReservationService.convertForOrder(client, {
+        workspaceId,
+        soId: id,
+      });
+
       for (const item of so.items) {
         const qtyToShip = item.ordered_qty - (item.fulfilled_qty || 0);
         if (qtyToShip <= 0) continue;
+
+        const reservation = reservationsByItem.get(item.id);
+        if (!reservation) {
+          // Legacy fallback: pre-Phase-7 SO with no reservation row. Deduct
+          // directly — but say so in the logs; this path is deprecated.
+          logger.warn('SO item shipped without an active reservation (legacy fallback)', {
+            soId: id, itemId: item.id, qty: qtyToShip,
+          });
+        } else if (reservation.quantity < qtyToShip) {
+          // Reservation exists but can't cover the full ship qty — refuse.
+          // The user should re-reserve (cancel + new SO) rather than silently oversell.
+          throw new AppError(
+            `Reservation for item covers ${reservation.quantity} units but ${qtyToShip} are pending shipment`,
+            422,
+            'RESERVATION_MISMATCH',
+            true,
+            { soItemId: item.id, reserved: reservation.quantity, requested: qtyToShip }
+          );
+        }
 
         const plan = fefoPlans.get(item.id);
         const movements: Array<{ qty: number; batchId?: string; batchNumber?: string | null }> = plan
@@ -194,12 +355,18 @@ export class SalesService {
             idempotencyKey: `so:${id}:ship:${item.id}:${item.fulfilled_qty || 0}:${mv.batchId || 'nobatch'}`,
           });
 
-          if (!result.duplicate && mv.batchId) {
-            // Keep the consumed batch's ledger-derived balance in step
-            await client.query(
-              `UPDATE batches SET synced_quantity = synced_quantity - $1 WHERE id = $2`,
-              [mv.qty, mv.batchId]
-            );
+          if (!result.duplicate) {
+            if (mv.batchId) {
+              // Keep the consumed batch's ledger-derived balance in step
+              await client.query(
+                `UPDATE batches SET synced_quantity = synced_quantity - $1 WHERE id = $2`,
+                [mv.qty, mv.batchId]
+              );
+            }
+            if (reservation) {
+              // Convert the hold: reservation row + reserved_quantity decrement
+              await ReservationService.markConverted(client, reservation);
+            }
           }
         }
 
@@ -217,7 +384,7 @@ export class SalesService {
         action: 'so.shipped',
         entity: 'sales_order',
         entityId: id,
-        newValue: { status: 'shipped' },
+        newValue: { status: 'shipped', reservations_converted: reservationsByItem.size },
       });
     });
 

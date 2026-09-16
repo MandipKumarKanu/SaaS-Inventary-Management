@@ -18,22 +18,23 @@ export class ExternalApiService {
   }
 
   /**
-   * List inventory balances per SKU via Public API
+   * List inventory balances per SKU via Public API.
+   * Phase 7: quantity_available comes from THE single available-stock formula
+   * (on-hand minus reservations) — never a locally re-derived number.
    */
   static async listInventory(workspaceId: string) {
     const { data, error } = await supabaseAdmin
       .from('inventory')
       .select(`
         id,
-        quantity_on_hand,
-        quantity_reserved,
-        quantity_available,
-        products (
+        quantity,
+        reserved_quantity,
+        product:products (
           id,
           sku,
           name
         ),
-        warehouses (
+        warehouse:warehouses (
           id,
           name,
           code
@@ -42,7 +43,15 @@ export class ExternalApiService {
       .eq('workspace_id', workspaceId);
 
     if (error) throw new Error(error.message);
-    return data;
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      quantity_on_hand: row.quantity,
+      quantity_reserved: row.reserved_quantity || 0,
+      quantity_available: InventoryService.availableQuantity(row),
+      product: row.product,
+      warehouse: row.warehouse,
+    }));
   }
 
   /**

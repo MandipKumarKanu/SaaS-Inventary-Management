@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../../config/supabase.js';
+import { InventoryService } from '../inventory/inventory.service.js';
 
 export class RoutingService {
   static async listRules(workspaceId: string, queryParams?: { page?: number; pageSize?: number }) {
@@ -75,21 +76,23 @@ export class RoutingService {
       };
     }
 
-    // 2. Default to warehouse with highest stock level
-    const { data: inv } = await supabaseAdmin
+    // 2. Default to warehouse with highest AVAILABLE stock (Phase 7, Rule #15):
+    // reserved units are promised elsewhere and must not attract new orders.
+    const { data: rows } = await supabaseAdmin
       .from('inventory')
-      .select('warehouse_id, quantity, warehouse:warehouses(id, name, code)')
+      .select('warehouse_id, quantity, reserved_quantity, warehouse:warehouses(id, name, code)')
       .eq('workspace_id', workspaceId)
-      .eq('product_id', productId)
-      .order('quantity', { ascending: false })
-      .limit(1)
-      .single();
+      .eq('product_id', productId);
 
-    if (inv) {
+    const best = (rows || [])
+      .map((r: any) => ({ ...r, available: InventoryService.availableQuantity(r) }))
+      .sort((a: any, b: any) => b.available - a.available)[0];
+
+    if (best) {
       return {
-        recommended_warehouse_id: inv.warehouse_id,
-        warehouse_name: (inv as any).warehouse?.name || 'Stock Capacity Warehouse',
-        match_reason: `Selected warehouse with maximum available stock (${inv.quantity} units)`,
+        recommended_warehouse_id: best.warehouse_id,
+        warehouse_name: best.warehouse?.name || 'Stock Capacity Warehouse',
+        match_reason: `Selected warehouse with maximum available stock (${best.available} units, ${best.reserved_quantity || 0} reserved)`,
       };
     }
 

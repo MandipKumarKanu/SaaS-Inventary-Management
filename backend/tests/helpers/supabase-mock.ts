@@ -66,8 +66,9 @@ export function makeDb() {
 
   /** Resolve a PostgREST-style select string for a row. */
   function embed(row: Row, selRaw: string): Row {
-    // Normalize whitespace/newlines: real code uses multiline template literals
-    selRaw = selRaw.replace(/\s+/g, ' ').trim();
+    // Normalize whitespace/newlines: real code uses multiline template literals.
+    // Also collapse space before '(' so "product:products (" parses like "product:products(".
+    selRaw = selRaw.replace(/\s+/g, ' ').trim().replace(/\s+\(/g, '(');
     const sel = selRaw;
     if (!sel || sel === '*') return { ...row };
 
@@ -231,6 +232,13 @@ export function makeDb() {
       // Supabase .is() matches null / true / false exactly
       if (val === null) this.filters.push((r) => r[col] == null);
       else this.filters.push((r) => r[col] === val);
+      return this;
+    }
+
+    ilike(col: string, pattern: string) {
+      // PostgREST ilike: %value% substring match, case-insensitive
+      const val = pattern.replace(/^%|%$/g, '').toLowerCase();
+      this.filters.push((r) => typeof r[col] === 'string' && r[col].toLowerCase().includes(val));
       return this;
     }
 

@@ -190,6 +190,42 @@ export class InventoryService {
   }
 
   /**
+   * THE available-stock formula (Phase 7, Rule #15 — defined exactly once).
+   * Every consumer (reorder recs, routing, external API, dashboards) calls
+   * this instead of re-deriving the math. Reserved stock is held for
+   * confirmed orders and is NOT available to sell.
+   */
+  static availableQuantity(row: { quantity: number; reserved_quantity?: number | null }): number {
+    return (row.quantity || 0) - (row.reserved_quantity || 0);
+  }
+
+  /**
+   * Bulk available-stock map: productId → total available across warehouses.
+   * Reuses the single formula over every inventory row in the workspace.
+   */
+  static async getAvailableByProduct(
+    workspaceId: string,
+    filters: { productIds?: string[] } = {}
+  ): Promise<Record<string, number>> {
+    const { supabaseAdmin } = await import('../../config/supabase.js');
+    let query = supabaseAdmin
+      .from('inventory')
+      .select('product_id, quantity, reserved_quantity')
+      .eq('workspace_id', workspaceId);
+    if (filters.productIds && filters.productIds.length > 0) {
+      query = query.in('product_id', filters.productIds);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const map: Record<string, number> = {};
+    for (const row of data || []) {
+      map[row.product_id] = (map[row.product_id] || 0) + this.availableQuantity(row);
+    }
+    return map;
+  }
+
+  /**
    * List inventory balances across warehouses (read path — no transaction needed)
    */
   static async getStockLevels(workspaceId: string, filters: { productId?: string; warehouseId?: string }) {

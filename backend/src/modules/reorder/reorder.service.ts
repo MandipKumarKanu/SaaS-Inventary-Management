@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../../config/supabase.js';
+import { InventoryService } from '../inventory/inventory.service.js';
 
 export class ReorderService {
   static async getRecommendations(
@@ -13,23 +14,16 @@ export class ReorderService {
 
     if (pErr) throw pErr;
 
-    // 2. Fetch inventory stock balances per product
-    const { data: stockLevels, error: sErr } = await supabaseAdmin
-      .from('inventory')
-      .select('product_id, quantity')
-      .eq('workspace_id', workspaceId);
-
-    if (sErr) throw sErr;
-
-    // Aggregate stock by product_id
-    const stockMap: Record<string, number> = {};
-    (stockLevels || []).forEach((lvl) => {
-      stockMap[lvl.product_id] = (stockMap[lvl.product_id] || 0) + (lvl.quantity || 0);
-    });
+    // 2. Available stock per product — reservations excluded (Phase 7, Rule #15).
+    // Reserved units are promised to confirmed orders; reordering on them would oversell.
+    const stockMap = await InventoryService.getAvailableByProduct(
+      workspaceId,
+      { productIds: (products || []).map((p: any) => p.id) }
+    );
 
     const recommendations = (products || [])
       .map((p) => {
-        const currentStock = stockMap[p.id] || 0;
+        const currentStock = stockMap[p.id] ?? 0; // available, not on-hand
         const reorderPoint = p.reorder_point ?? 10;
         const maxStock = p.max_stock || Math.max(reorderPoint * 3, 50);
         const isReorderNeeded = currentStock <= reorderPoint;

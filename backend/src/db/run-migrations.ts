@@ -54,6 +54,7 @@ async function runMigrations() {
     '015_audit_log_write_access.sql',
     '016_fix_workspace_members_rls_recursion.sql',
     '017_warehouse_ops_completion.sql',
+    '018_reservations.sql',
   ];
 
   // Use the transaction mode pooler for migrations

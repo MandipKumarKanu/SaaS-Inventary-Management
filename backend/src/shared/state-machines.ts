@@ -24,6 +24,13 @@ interface TransitionMap {
    * receipt/shipment/completion without stock actually moving.
    */
   stockEdges: Record<string, string[]>;
+  /**
+   * Phase 7: composite-forward traversal may NOT pass through these states —
+   * they are mandatory checkpoints backed by side effects (e.g. SO 'reserved'
+   * holds stock; skipping it via a composite edge would oversell). Only
+   * single-step edges and stock edges may touch them.
+   */
+  checkpointStates?: string[];
   /** Statuses from which `cancelled` may be reached (empty = not cancellable) */
   cancellableFrom: string[];
   /** Terminal statuses — no further transitions */
@@ -65,8 +72,14 @@ const SALES_ORDER: TransitionMap = {
     shipped: ['delivered'], // delivered = metadata confirmation, no stock movement
   },
   stockEdges: {
-    packed: ['shipped'], // fulfillOrder deducts stock
+    // Phase 7: shipping CONVERTS reservations into deductions (PRD §30).
+    reserved: ['shipped'],
+    picking: ['shipped'],
+    packed: ['shipped'],
   },
+  // 'reserved' holds stock — composite traversal may never pass THROUGH it
+  // (confirmed → …→ shipped without reserving would oversell).
+  checkpointStates: ['reserved'],
   cancellableFrom: ['draft', 'confirmed', 'reserved', 'picking', 'packed'],
   terminal: ['delivered', 'cancelled'],
   transitionPermissions: {
@@ -148,7 +161,8 @@ function isCancellation(machine: TransitionMap, from: string, to: string): boole
   return to === 'cancelled' && machine.cancellableFrom.includes(from);
 }
 
-/** Is `to` reachable from `from` via forward steps (composite allowed)? */
+/** Is `to` reachable from `from` via forward steps (composite allowed)?
+ *  Composite paths may never pass THROUGH a checkpoint state (Phase 7). */
 function isForwardReachable(
   machine: TransitionMap,
   from: string,
@@ -156,10 +170,14 @@ function isForwardReachable(
   includeStockEdges: boolean
 ): boolean {
   const visited = new Set<string>([from]);
-  const edges = (m: string) => [
-    ...(machine.transitions[m] || []),
-    ...(includeStockEdges ? machine.stockEdges[m] || [] : []),
-  ];
+  const checkpoints = new Set(machine.checkpointStates || []);
+  const edges = (m: string) =>
+    checkpoints.has(m)
+      ? [] // checkpoint states are exits-only: no composite path continues past them
+      : [
+          ...(machine.transitions[m] || []),
+          ...(includeStockEdges ? machine.stockEdges[m] || [] : []),
+        ];
   const queue = [...edges(from)];
   while (queue.length > 0) {
     const cur = queue.shift()!;
