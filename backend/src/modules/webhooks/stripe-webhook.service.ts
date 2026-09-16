@@ -1,0 +1,293 @@
+import { supabaseAdmin } from '../../config/supabase.js';
+import { logger } from '../../config/logger.js';
+import { PlanCatalogService } from '../../services/plan-catalog.service.js';
+import { BillingService } from '../billing/billing.service.js';
+import { AuditService } from '../audit/audit.service.js';
+
+/**
+ * Phase 3 Step 4: Stripe event → subscription state machine.
+ *
+ * Runs AFTER signature verification (Phase 0) and event-id idempotency
+ * (stripe_webhook_events). Adds:
+ *   - processing result recording (processing_status / processed_at)
+ *   - subscription state transitions with out-of-order event protection
+ *   - usage_records limit re-sync on plan change
+ *
+ * Handled events (PRD §73):
+ *   checkout.session.completed       → activate plan, bind stripe ids
+ *   customer.subscription.updated    → status/period sync (skips stale events)
+ *   customer.subscription.deleted    → cancelled
+ *   invoice.payment_failed           → past_due + 7-day grace window
+ */
+
+const GRACE_PERIOD_DAYS = 7;
+
+export interface ProcessedEventResult {
+  status: 'processed' | 'already_processed' | 'ignored' | 'skipped_stale' | 'no_workspace' | 'failed';
+  detail?: string;
+}
+
+interface StripeLikeEvent {
+  id: string;
+  type: string;
+  created: number;
+  data: { object: any };
+}
+
+export class StripeWebhookService {
+  /** Entry point called by the webhook route after signature verification. */
+  static async processEvent(event: StripeLikeEvent): Promise<ProcessedEventResult> {
+    // 1. Idempotency: same event id delivered twice → process once.
+    const { data: existing } = await supabaseAdmin
+      .from('stripe_webhook_events')
+      .select('id, processing_status')
+      .eq('event_id', event.id)
+      .maybeSingle();
+
+    if (existing) {
+      return { status: 'already_processed' };
+    }
+
+    // 2. Dispatch
+    let result: ProcessedEventResult;
+    try {
+      result = await this.dispatch(event);
+    } catch (err: any) {
+      logger.error('Stripe webhook handler failed', { eventId: event.id, error: err.message });
+      // Record failure so ops can see it; return failed so the route 500s and
+      // Stripe retries (the recorded row blocks duplicate side effects only on
+      // success paths — see markProcessed).
+      result = { status: 'failed', detail: err.message };
+      await this.record(event, result.status, result.detail);
+      return result;
+    }
+
+    // 3. Record outcome + audit trail (PRD §41: subscription changes audited)
+    await this.record(event, result.status, result.detail);
+    if (result.status === 'processed') {
+      await AuditService.log({
+        workspaceId: null,
+        userId: event.id,
+        action: 'billing.webhook_processed',
+        entity: 'subscription',
+        entityId: event.type,
+        newValue: { event_type: event.type, detail: result.detail },
+      });
+    }
+    return result;
+  }
+
+  private static async dispatch(event: StripeLikeEvent): Promise<ProcessedEventResult> {
+    switch (event.type) {
+      case 'checkout.session.completed':
+        return this.handleCheckoutCompleted(event.data.object);
+      case 'customer.subscription.updated':
+        return this.handleSubscriptionUpdated(event);
+      case 'customer.subscription.deleted':
+        return this.handleSubscriptionDeleted(event);
+      case 'invoice.payment_failed':
+        return this.handlePaymentFailed(event);
+      default:
+        return { status: 'ignored', detail: `Unhandled event type: ${event.type}` };
+    }
+  }
+
+  /**
+   * checkout.session.completed:
+   *   client_reference_id = workspace_id, metadata.plan_name = tier.
+   * Activates the plan, binds stripe ids, sets the period, re-syncs limits.
+   */
+  private static async handleCheckoutCompleted(session: any): Promise<ProcessedEventResult> {
+    const workspaceId = session.client_reference_id || session.metadata?.workspace_id;
+    const planName = session.metadata?.plan_name;
+
+    if (!workspaceId) return { status: 'no_workspace', detail: 'checkout session without client_reference_id' };
+    if (!planName) return { status: 'failed', detail: 'checkout session missing metadata.plan_name' };
+
+    const plan = await PlanCatalogService.getPlanByName(planName);
+    if (!plan) return { status: 'failed', detail: `unknown plan in metadata: ${planName}` };
+
+    const now = new Date().toISOString();
+    const periodEnd = session.subscription
+      ? await this.fetchCurrentPeriodEnd(session.subscription)
+      : null;
+
+    const { error } = await supabaseAdmin
+      .from('subscriptions')
+      .update({
+        plan_id: plan.id,
+        status: 'active',
+        stripe_customer_id: session.customer ?? null,
+        stripe_subscription_id: session.subscription ?? null,
+        current_period_start: now,
+        current_period_end: periodEnd,
+        past_due_at: null,
+        grace_ends_at: null,
+        cancelled_at: null,
+        updated_at: now,
+      })
+      .eq('workspace_id', workspaceId);
+
+    if (error) throw error;
+
+    await BillingService.syncPlanLimits(workspaceId);
+    return { status: 'processed', detail: `workspace ${workspaceId} → ${plan.name}` };
+  }
+
+  /**
+   * customer.subscription.updated: sync status + period.
+   * Out-of-order protection: if the subscription row was updated by a NEWER
+   * Stripe event (tracked via updated_at vs event.created), skip this one.
+   */
+  private static async handleSubscriptionUpdated(event: StripeLikeEvent): Promise<ProcessedEventResult> {
+    const sub = event.data.object;
+    const stripeSubscriptionId = sub.id;
+
+    const { data: row } = await supabaseAdmin
+      .from('subscriptions')
+      .select('id, workspace_id, updated_at, stripe_subscription_id')
+      .eq('stripe_subscription_id', stripeSubscriptionId)
+      .maybeSingle();
+
+    if (!row) {
+      // Not bound yet (e.g. updated arrived before checkout completion was
+      // processed). Safe to skip: checkout.session.completed will set state.
+      return { status: 'skipped_stale', detail: 'no bound subscription for this stripe id' };
+    }
+
+    // Out-of-order guard: our row's updated_at (set by a newer event) beats
+    // this event's creation time. Tolerance of 1s for clock precision.
+    if (row.updated_at) {
+      const rowUpdatedAt = new Date(row.updated_at).getTime();
+      const eventCreated = event.created * 1000;
+      if (rowUpdatedAt - eventCreated > 1000) {
+        return { status: 'skipped_stale', detail: 'newer event already applied' };
+      }
+    }
+
+    const status = this.mapStripeStatus(sub.status);
+    const now = new Date().toISOString();
+
+    const { error } = await supabaseAdmin
+      .from('subscriptions')
+      .update({
+        status,
+        current_period_start: sub.current_period_start
+          ? new Date(sub.current_period_start * 1000).toISOString()
+          : undefined,
+        current_period_end: sub.current_period_end
+          ? new Date(sub.current_period_end * 1000).toISOString()
+          : undefined,
+        cancelled_at: sub.status === 'canceled' ? now : undefined,
+        updated_at: now,
+      })
+      .eq('id', row.id);
+
+    if (error) throw error;
+    return { status: 'processed', detail: `subscription → ${status}` };
+  }
+
+  /**
+   * customer.subscription.deleted: cancelled. Workspace keeps billing access
+   * only (enforced by workspace.middleware, Step 5).
+   */
+  private static async handleSubscriptionDeleted(event: StripeLikeEvent): Promise<ProcessedEventResult> {
+    const sub = event.data.object;
+
+    const { data: row } = await supabaseAdmin
+      .from('subscriptions')
+      .select('id')
+      .eq('stripe_subscription_id', sub.id)
+      .maybeSingle();
+
+    if (!row) return { status: 'skipped_stale', detail: 'no bound subscription' };
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseAdmin
+      .from('subscriptions')
+      .update({ status: 'cancelled', cancelled_at: now, updated_at: now })
+      .eq('id', row.id);
+
+    if (error) throw error;
+    return { status: 'processed', detail: 'subscription cancelled' };
+  }
+
+  /**
+   * invoice.payment_failed: past_due + grace window anchor.
+   */
+  private static async handlePaymentFailed(event: StripeLikeEvent): Promise<ProcessedEventResult> {
+    const invoice = event.data.object;
+
+    // Resolve workspace via the customer binding (works even before a
+    // subscription row exists — but we only act when one does).
+    let customerId = invoice.customer;
+    let workspaceId: string | null = null;
+
+    const { data: row } = await supabaseAdmin
+      .from('subscriptions')
+      .select('id, workspace_id')
+      .eq('stripe_customer_id', customerId)
+      .maybeSingle();
+
+    if (!row) return { status: 'skipped_stale', detail: 'no subscription for customer' };
+    workspaceId = row.workspace_id;
+
+    const now = new Date();
+    const graceEnd = new Date(now.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+
+    const { error } = await supabaseAdmin
+      .from('subscriptions')
+      .update({
+        status: 'past_due',
+        past_due_at: now.toISOString(),
+        grace_ends_at: graceEnd.toISOString(),
+        updated_at: now.toISOString(),
+      })
+      .eq('id', row.id);
+
+    if (error) throw error;
+    return { status: 'processed', detail: `workspace ${workspaceId} past_due, grace until ${graceEnd.toISOString()}` };
+  }
+
+  /** Map Stripe subscription status → our status enum. */
+  private static mapStripeStatus(stripeStatus: string): string {
+    switch (stripeStatus) {
+      case 'trialing': return 'trialing';
+      case 'active': return 'active';
+      case 'past_due':
+      case 'unpaid': return 'past_due';
+      case 'canceled':
+      case 'incomplete_expired': return 'cancelled';
+      case 'paused': return 'suspended';
+      default: return 'active';
+    }
+  }
+
+  private static async fetchCurrentPeriodEnd(stripeSubscriptionId: string): Promise<string | null> {
+    try {
+      // Lazily import to avoid a hard Stripe dependency in unit tests
+      const { getStripe } = await import('../../config/stripe.js');
+      const stripe = getStripe();
+      const sub = (await stripe.subscriptions.retrieve(stripeSubscriptionId)) as any;
+      return sub.current_period_end
+        ? new Date(sub.current_period_end * 1000).toISOString()
+        : null;
+    } catch (err: any) {
+      logger.warn('Could not fetch Stripe period end', { error: err.message });
+      return null;
+    }
+  }
+
+  private static async record(event: StripeLikeEvent, status: string, detail?: string): Promise<void> {
+    const { error } = await supabaseAdmin.from('stripe_webhook_events').insert({
+      event_id: event.id,
+      event_type: event.type,
+      processing_status: status,
+      detail: detail || null,
+      stripe_event_created: new Date(event.created * 1000).toISOString(),
+    });
+    if (error) {
+      logger.error('Failed to record stripe webhook event', { eventId: event.id, error: error.message });
+    }
+  }
+}

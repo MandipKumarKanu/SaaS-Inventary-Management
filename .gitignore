@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+out/
+*.tgz
+
+# Env / secrets (examples are committed, real values never)
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+*.local
+
+# Coverage / logs
+coverage/
+*.lcov
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Caches / build info
+.cache/
+.eslintcache
+*.tsbuildinfo
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

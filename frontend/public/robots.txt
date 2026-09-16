@@ -1,0 +1,46 @@
+# StockFlow PRO — robots.txt (Bing + Google)
+# Guidelines applied:
+#  - robots.txt controls CRAWL access, not indexing (use meta noindex / X-Robots-Tag for that).
+#  - Allow Bingbot/MSNBot on public pages only; keep auth-walled app out of crawl budget.
+#  - Sitemap lists canonical URLs only, with lastmod freshness signals.
+# TODO: replace https://www.example.com with your production domain.
+
+User-agent: Bingbot
+Allow: /login
+Allow: /signup
+Allow: /assets/
+Allow: /favicon.svg
+Disallow: /dashboard
+Disallow: /inventory
+Disallow: /products
+Disallow: /transfers
+Disallow: /counts
+Disallow: /purchases
+Disallow: /sales
+Disallow: /returns
+Disallow: /reports
+Disallow: /settings/
+Disallow: /team
+Disallow: /admin-portal
+Disallow: /system-health
+Disallow: /api/
+Disallow: /*?
+Crawl-delay: 2
+
+User-agent: msnbot
+Allow: /login
+Allow: /signup
+Allow: /assets/
+Disallow: /api/
+Disallow: /*?
+
+User-agent: *
+Allow: /login
+Allow: /signup
+Allow: /assets/
+Allow: /favicon.svg
+Disallow: /dashboard
+Disallow: /api/
+Disallow: /*?
+
+Sitemap: https://www.example.com/sitemap.xml
