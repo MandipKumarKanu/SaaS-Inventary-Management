@@ -229,13 +229,39 @@ export class AuthService {
    * Get current user profile
    */
   static async getProfile(userId: string) {
-    const { data, error } = await supabaseAdmin
+    let { data, error } = await supabaseAdmin
       .from('users')
       .select('id, email, name, avatar_url, status, created_at')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
-    if (error || !data) {
+    if (!data) {
+      try {
+        const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+        if (authUser?.user) {
+          const email = authUser.user.email?.toLowerCase() || '';
+          const name = authUser.user.user_metadata?.name || email.split('@')[0] || 'User';
+          const { data: newProfile } = await supabaseAdmin
+            .from('users')
+            .upsert(
+              {
+                id: userId,
+                email,
+                name,
+                status: 'active',
+              },
+              { onConflict: 'id' }
+            )
+            .select('id, email, name, avatar_url, status, created_at')
+            .single();
+          data = newProfile;
+        }
+      } catch (err: any) {
+        logger.warn('Failed to auto-provision user profile in getProfile', { error: err?.message, userId });
+      }
+    }
+
+    if (!data) {
       throw AppError.notFound('User not found');
     }
 
