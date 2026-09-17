@@ -57,6 +57,40 @@ export class WorkspaceService {
       throw AppError.conflict('A workspace with this slug already exists', 'SLUG_EXISTS');
     }
 
+    // Ensure user profile exists in public.users table before creating workspace
+    const { data: userProfile } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (!userProfile) {
+      let email = 'user@example.com';
+      let name = 'User';
+      try {
+        const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+        if (authUser?.user) {
+          email = authUser.user.email?.toLowerCase() || email;
+          name = authUser.user.user_metadata?.name || authUser.user.email?.split('@')[0] || name;
+        }
+      } catch (err: any) {
+        logger.warn('Failed to fetch user from Supabase auth', { error: err?.message, userId });
+      }
+
+      const { error: upsertErr } = await supabaseAdmin.from('users').upsert(
+        {
+          id: userId,
+          email,
+          name,
+          status: 'active',
+        },
+        { onConflict: 'id' }
+      );
+      if (upsertErr) {
+        logger.error('Failed to ensure user profile before workspace creation', { error: upsertErr.message, userId });
+      }
+    }
+
     // 1. Create workspace
     const { data: workspace, error: wsError } = await supabaseAdmin
       .from('workspaces')
@@ -93,27 +127,6 @@ export class WorkspaceService {
     }
 
     try {
-      // Ensure user profile exists in public.users table before inserting membership
-      const { data: userProfile } = await supabaseAdmin
-        .from('users')
-        .select('id')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (!userProfile) {
-        const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
-        if (authUser?.user) {
-          await supabaseAdmin.from('users').upsert(
-            {
-              id: userId,
-              email: authUser.user.email?.toLowerCase() || '',
-              name: authUser.user.user_metadata?.name || authUser.user.email?.split('@')[0] || 'User',
-              status: 'active',
-            },
-            { onConflict: 'id' }
-          );
-        }
-      }
 
       // 2. Create owner membership
       const { data: member, error: memberError } = await supabaseAdmin
