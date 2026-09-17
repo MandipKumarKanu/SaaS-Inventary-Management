@@ -182,7 +182,7 @@ export function makeDb() {
       const rows = Array.isArray(vals) ? vals : [vals];
       const table = getTable(this.tbl);
       for (const r of rows) {
-        const keyCols = ['workspace_id', 'metric', 'id', 'user_id', 'email'].filter((c) => c in r);
+        const keyCols = ['workspace_id', 'metric', 'id', 'user_id', 'email', 'key'].filter((c) => c in r);
         const existing = table.find((row) =>
           keyCols.length > 0 && keyCols.every((c) => row[c] === r[c])
         );
@@ -431,6 +431,24 @@ export function makeSupabaseAdminMock(db: TestDb, authUsers: Map<string, { id: s
       },
       async getSession() {
         return { data: { session: null }, error: null };
+      },
+      /**
+       * §66 re-auth backing: accept the fixed test password for any
+       * registered user identity (email registered via issueToken, or any
+       * email — verification here only needs to be deterministic, not secret).
+       * Non-empty password → success; empty/missing is rejected by the caller.
+       */
+      async signInWithPassword(params: { email: string; password: string }) {
+        if (!params.password) {
+          return { data: { user: null }, error: { message: 'Invalid credentials' } };
+        }
+        // Resolve the user id from the registered identities (any match by email).
+        const entry = [...authUsers.values()].find((u) => u.email === params.email);
+        const id = entry?.id ?? `auth_${params.email}`;
+        return { data: { user: { id, email: params.email } }, error: null };
+      },
+      async signOut(_opts?: unknown) {
+        return { error: null };
       },
     },
   };

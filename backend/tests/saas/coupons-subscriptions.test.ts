@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { buildTestApp, request } from '../helpers/test-app';
 import { seedWorld, wsId, userId } from '../helpers/world';
 import { seedPlans, upsertSubscription, PLAN_IDS } from '../helpers/billing-world';
-import { issueToken, testDb } from '../setup';
+import { issueToken, testDb, ADMIN_TEST_PASSWORD } from '../setup';
 
 /**
  * SaaS Business Layer suite (coupons §21–§34, subscription lifecycle §19–§20,
@@ -348,18 +348,19 @@ describe('Platform admin RBAC (§38, §65)', () => {
     expect(new Set(codes).size).toBe(5);
   });
 
-  it('admin trial extension requires a reason and is audited (§48)', async () => {
+  it('admin trial extension requires a reason and is audited (§48, §66)', async () => {
     upsertSubscription(testDb, W1, PLAN_IDS.starter, 'trialing');
     const missing = await request(app)
       .post(`/api/v1/admin/workspaces/${W1}/subscription/extend-trial`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ days: 7, reason: '' });
-    // Zod failure → 422 per the platform's validation convention
-    expect(missing.status).toBe(422);
+    // §66 re-auth gate fires before body validation
+    expect(missing.status).toBe(401);
 
     const ok = await request(app)
       .post(`/api/v1/admin/workspaces/${W1}/subscription/extend-trial`)
       .set('Authorization', `Bearer ${adminToken}`)
+      .set('x-admin-password', ADMIN_TEST_PASSWORD)
       .send({ days: 7, reason: 'customer requested more evaluation time' });
     expect(ok.status).toBe(200);
     const audits = testDb.__all('audit_logs') as any[];

@@ -84,8 +84,8 @@ export function Header({ onOpenInviteModal, onOpenMobileNav }) {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Notifications</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => navigate('/notifications')}>View notification center</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => navigate('/reorder')}>View reorder alerts</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => navigate(`/app/${activeWorkspace?.slug || ''}/notifications`)}>View notification center</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => navigate(`/app/${activeWorkspace?.slug || ''}/reorder`)}>View reorder alerts</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 

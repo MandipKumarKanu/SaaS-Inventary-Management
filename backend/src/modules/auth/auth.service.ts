@@ -24,6 +24,9 @@ export class AuthService {
     const { email, password, name } = params;
 
     // 1. Create Supabase auth user
+    let userId: string;
+    let sessionData: { access_token?: string; refresh_token?: string; expires_at?: number } | null = null;
+
     const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
       email,
       password,
@@ -33,39 +36,91 @@ export class AuthService {
     });
 
     if (authError || !authData.user) {
-      logger.error('Signup auth error', { error: authError?.message });
-      if (authError?.message?.includes('already registered')) {
-        throw AppError.conflict('An account with this email already exists', 'EMAIL_EXISTS');
+      if (authError?.message?.toLowerCase().includes('rate limit')) {
+        logger.warn('Supabase email rate limit hit during signup; falling back to admin user creation', { email });
+        const { data: adminData, error: adminError } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: { name },
+        });
+
+        if (adminError || !adminData.user) {
+          logger.error('Signup admin fallback error', { error: adminError?.message });
+          if (
+            adminError?.message?.includes('already registered') ||
+            adminError?.message?.includes('already exists')
+          ) {
+            throw AppError.conflict('An account with this email already exists', 'EMAIL_EXISTS');
+          }
+          throw AppError.badRequest(adminError?.message || 'Failed to create user');
+        }
+
+        userId = adminData.user.id;
+
+        // Auto-signin to obtain a valid session token for the newly created user
+        const { data: signInData } = await supabaseAdmin.auth.signInWithPassword({ email, password });
+        if (signInData?.session) {
+          sessionData = {
+            access_token: signInData.session.access_token,
+            refresh_token: signInData.session.refresh_token,
+            expires_at: signInData.session.expires_at,
+          };
+        }
+      } else {
+        logger.error('Signup auth error', { error: authError?.message });
+        if (authError?.message?.includes('already registered')) {
+          throw AppError.conflict('An account with this email already exists', 'EMAIL_EXISTS');
+        }
+        throw AppError.badRequest(authError?.message || 'Failed to create user');
       }
-      throw AppError.badRequest(authError?.message || 'Failed to create user');
+    } else {
+      userId = authData.user.id;
+      sessionData = authData.session
+        ? {
+            access_token: authData.session.access_token,
+            refresh_token: authData.session.refresh_token,
+            expires_at: authData.session.expires_at,
+          }
+        : null;
     }
 
-    // 2. Create profile in users table
+    // 2. Create profile in users table (upsert to handle trigger-created rows gracefully)
     const { data: userProfile, error: profileError } = await supabaseAdmin
       .from('users')
-      .insert({
-        id: authData.user.id,
-        email: email.toLowerCase(),
-        name,
-        status: 'active',
-      })
+      .upsert(
+        {
+          id: userId,
+          email: email.toLowerCase(),
+          name,
+          status: 'active',
+        },
+        { onConflict: 'id' }
+      )
       .select('id, email, name, avatar_url, status, created_at')
       .single();
 
     if (profileError) {
-      logger.error('Failed to create user profile', { error: profileError.message });
-      throw AppError.internal('Failed to complete user registration');
+      logger.error('Failed to create user profile', {
+        error: profileError.message,
+        code: profileError.code,
+        details: profileError.details,
+      });
+      if (
+        profileError.code === '23505' ||
+        profileError.message?.includes('already exists') ||
+        profileError.message?.includes('unique constraint')
+      ) {
+        throw AppError.conflict('An account with this email already exists', 'EMAIL_EXISTS');
+      }
+      throw AppError.badRequest(profileError.message || 'Failed to complete user registration');
     }
 
-    const isPlatformAdmin = await checkIsPlatformAdmin(authData.user.id, email);
+    const isPlatformAdmin = await checkIsPlatformAdmin(userId, email);
 
     return {
       user: { ...userProfile, is_platform_admin: isPlatformAdmin },
-      session: {
-        access_token: authData.session?.access_token,
-        refresh_token: authData.session?.refresh_token,
-        expires_at: authData.session?.expires_at,
-      },
+      session: sessionData,
     };
   }
 

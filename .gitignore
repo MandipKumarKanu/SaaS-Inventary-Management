@@ -38,4 +38,6 @@ yarn-error.log*
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+# Plans
+*plan*.md
+todo.md

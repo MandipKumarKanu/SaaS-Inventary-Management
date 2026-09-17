@@ -60,6 +60,12 @@ async function runMigrations() {
     '019_db_driven_config.sql',
     '020_goods_receipts.sql',
     '021_saas_business_layer.sql',
+    '022_admin_portal_completion.sql',
+    '023_admin_monitoring.sql',
+    '024_grant_permissions.sql',
+    '025_users_rls_policy.sql',
+    '026_grant_rls_all_tables.sql',
+    '027_disable_rls_all_tables.sql',
   ];
 
   // Use the transaction mode pooler for migrations

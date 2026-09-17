@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { Plus } from 'lucide-react';
 import { Field, FormError } from '@/components/common/FormField';
@@ -7,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
 export function CreateWorkspaceModal({ onClose }) {
+  const navigate = useNavigate();
   const { createWorkspace } = useWorkspaceStore();
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
@@ -26,7 +28,10 @@ export function CreateWorkspaceModal({ onClose }) {
     setError(null);
 
     try {
-      await createWorkspace(name, slug);
+      const newWs = await createWorkspace(name, slug);
+      if (newWs?.slug) {
+        navigate(`/app/${newWs.slug}/dashboard`);
+      }
       onClose();
     } catch (err) {
       setError(err.message);

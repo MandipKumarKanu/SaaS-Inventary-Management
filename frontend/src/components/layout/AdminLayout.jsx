@@ -19,6 +19,7 @@ export function AdminLayout() {
     async function verifyAdmin() {
       if (!token) {
         if (isMounted) setIsVerifying(false);
+        navigate('/login');
         return;
       }
       try {
@@ -38,10 +39,9 @@ export function AdminLayout() {
     }
     verifyAdmin();
     return () => { isMounted = false; };
-  }, [token, fetchProfile]);
+  }, [token, fetchProfile, navigate]);
 
   if (!token) {
-    navigate('/login');
     return null;
   }
 

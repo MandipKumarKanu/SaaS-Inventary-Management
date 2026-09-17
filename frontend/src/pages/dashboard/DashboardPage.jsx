@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { api } from '../../lib/api';
 import {
@@ -182,16 +183,16 @@ export function DashboardPage() {
 
           <div className="flex shrink-0 items-center gap-2">
             <Button variant="secondary" asChild>
-              <a href="/products">
-                <Package />
+              <Link to={`/app/${activeWorkspace?.slug || ''}/products`}>
+                <Package className="h-4 w-4" />
                 Products
-              </a>
+              </Link>
             </Button>
             <Button asChild>
-              <a href="/inventory">
+              <Link to={`/app/${activeWorkspace?.slug || ''}/inventory`}>
                 Stock Balances
-                <ArrowUpRight />
-              </a>
+                <ArrowUpRight className="h-4 w-4" />
+              </Link>
             </Button>
           </div>
         </CardContent>

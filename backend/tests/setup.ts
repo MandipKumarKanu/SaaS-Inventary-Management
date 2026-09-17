@@ -44,3 +44,10 @@ beforeEach(() => {
   testDb.__reset();
   authUsers.clear();
 });
+
+/**
+ * §66 re-auth: deterministic admin password accepted by the Supabase auth
+ * mock (see makeSupabaseAdminMock). Dangerous-op tests send this in the
+ * x-admin-password header.
+ */
+export const ADMIN_TEST_PASSWORD = 'test-admin-password';

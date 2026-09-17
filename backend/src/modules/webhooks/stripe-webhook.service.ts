@@ -35,8 +35,17 @@ interface StripeLikeEvent {
 }
 
 export class StripeWebhookService {
-  /** Entry point called by the webhook route after signature verification. */
-  static async processEvent(event: StripeLikeEvent): Promise<ProcessedEventResult> {
+  /**
+   * Entry point called by the webhook route after signature verification.
+   * `deliveryAttempt` and `rawPayload` feed §58 monitoring (retry count,
+   * safe-retry re-dispatch). Both optional so internal callers stay simple.
+   */
+  static async processEvent(
+    event: StripeLikeEvent,
+    opts?: { deliveryAttempt?: number; rawPayload?: unknown }
+  ): Promise<ProcessedEventResult> {
+    const startedAt = Date.now();
+
     // 1. Idempotency: same event id delivered twice → process once.
     const { data: existing } = await supabaseAdmin
       .from('stripe_webhook_events')
@@ -45,6 +54,14 @@ export class StripeWebhookService {
       .maybeSingle();
 
     if (existing) {
+      // §58: a redelivery of a previously-failed event is an operator-visible
+      // retry — count it, but still do not double-process.
+      if (existing.processing_status === 'failed' && opts?.deliveryAttempt && opts.deliveryAttempt > 1) {
+        await supabaseAdmin
+          .from('stripe_webhook_events')
+          .update({ delivery_attempt: opts.deliveryAttempt })
+          .eq('event_id', event.id);
+      }
       return { status: 'already_processed' };
     }
 
@@ -58,12 +75,12 @@ export class StripeWebhookService {
       // Stripe retries (the recorded row blocks duplicate side effects only on
       // success paths — see markProcessed).
       result = { status: 'failed', detail: err.message };
-      await this.record(event, result.status, result.detail);
+      await this.record(event, result.status, result.detail, Date.now() - startedAt, opts);
       return result;
     }
 
     // 3. Record outcome + audit trail (PRD §41: subscription changes audited)
-    await this.record(event, result.status, result.detail);
+    await this.record(event, result.status, result.detail, Date.now() - startedAt, opts);
     if (result.status === 'processed') {
       await AuditService.log({
         workspaceId: null,
@@ -357,13 +374,23 @@ export class StripeWebhookService {
     }
   }
 
-  private static async record(event: StripeLikeEvent, status: string, detail?: string): Promise<void> {
+  private static async record(
+    event: StripeLikeEvent,
+    status: string,
+    detail?: string,
+    durationMs?: number,
+    opts?: { deliveryAttempt?: number; rawPayload?: unknown }
+  ): Promise<void> {
     const { error } = await supabaseAdmin.from('stripe_webhook_events').insert({
       event_id: event.id,
       event_type: event.type,
       processing_status: status,
       detail: detail || null,
       stripe_event_created: new Date(event.created * 1000).toISOString(),
+      // §58 observability columns (migration 023)
+      processing_duration_ms: durationMs ?? null,
+      delivery_attempt: opts?.deliveryAttempt ?? 1,
+      payload: (opts?.rawPayload as Record<string, unknown>) ?? { id: event.id, type: event.type, created: event.created, data: event.data },
     });
     if (error) {
       logger.error('Failed to record stripe webhook event', { eventId: event.id, error: error.message });

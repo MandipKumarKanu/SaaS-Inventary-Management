@@ -39,6 +39,8 @@ export type CouponRow = {
   max_redemptions_per_workspace: number | null;
   current_redemptions: number;
   active: boolean;
+  stripe_coupon_id?: string | null;
+  stripe_promotion_code_id?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

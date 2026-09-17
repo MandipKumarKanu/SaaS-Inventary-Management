@@ -60,6 +60,10 @@ const migrationFiles = [
   '019_db_driven_config.sql',
   '020_goods_receipts.sql',
   '021_saas_business_layer.sql',
+  '022_admin_portal_completion.sql',
+  '023_admin_monitoring.sql',
+  '024_grant_permissions.sql',
+  '025_users_rls_policy.sql',
 ];
 
 async function reset(): Promise<void> {

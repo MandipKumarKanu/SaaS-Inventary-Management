@@ -90,7 +90,7 @@ export function ReorderRecommendationsPage() {
         title="Automated Reorder Recommendations"
         description="Products at or below reorder threshold with calculated suggested purchase quantities"
         actions={
-          <Button onClick={() => navigate('/purchases')}>
+          <Button onClick={() => navigate(`/app/${activeWorkspace?.slug || ''}/purchases`)}>
             <ShoppingBag /> New Purchase Order
           </Button>
         }
@@ -190,7 +190,7 @@ export function ReorderRecommendationsPage() {
             <TableCell className="font-extrabold text-success">+{rec.suggestedOrderQty} units</TableCell>
             <TableCell>{urgencyBadge(rec.urgency)}</TableCell>
             <TableCell className="text-right">
-              <Button size="sm" onClick={() => navigate('/purchases')}>
+              <Button size="sm" onClick={() => navigate(`/app/${activeWorkspace?.slug || ''}/purchases`)}>
                 <ShoppingBag /> Create Purchase Order
               </Button>
             </TableCell>

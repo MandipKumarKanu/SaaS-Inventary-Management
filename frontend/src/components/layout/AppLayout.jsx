@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useParams } from 'react-router';
+import { Plus, Building2 } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -9,6 +10,7 @@ import { InviteMemberModal } from '../../pages/team/InviteMemberModal';
 import { PermissionDeniedPage } from '../../components/common/PermissionDeniedPage';
 import { LoadingState } from '@/components/common/DataTable';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
 
 /**
  * Phase 9 (PRD §6): the URL is the workspace authority.
@@ -56,13 +58,21 @@ export function AppLayout() {
 
   // Resolve the URL slug against the workspace list.
   useEffect(() => {
-    if (!token || !workspaceSlug) return;
+    if (!token) return;
 
-    // Wait until the list is available before judging the slug.
+    const isLoadingWorkspaces = useWorkspaceStore.getState().isLoading;
+
+    // Handle user with no workspaces
     if (workspaces.length === 0) {
-      setIsResolving(true);
+      if (isLoadingWorkspaces) {
+        setIsResolving(true);
+        return;
+      }
+      setIsResolving(false);
       return;
     }
+
+    if (!workspaceSlug) return;
 
     const matched = workspaces.find(
       (w) => w.slug === workspaceSlug || w.id === workspaceSlug
@@ -108,6 +118,31 @@ export function AppLayout() {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <LoadingState message="Opening workspace…" />
+      </div>
+    );
+  }
+
+  // Handle case where logged-in user has 0 workspaces
+  if (workspaces.length === 0) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <div className="w-full max-w-md space-y-6 rounded-xl border bg-card p-8 text-center text-card-foreground shadow-lg">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Building2 className="h-7 w-7" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold tracking-tight">Create your workspace</h2>
+            <p className="text-sm text-muted-foreground">
+              You don&apos;t have any workspaces yet. Create your first workspace to start managing your inventory.
+            </p>
+          </div>
+          <Button onClick={() => setIsCreateWsOpen(true)} size="lg" className="w-full">
+            <Plus className="mr-2 h-4 w-4" /> Create Workspace
+          </Button>
+        </div>
+        {isCreateWsOpen && (
+          <CreateWorkspaceModal onClose={() => setIsCreateWsOpen(false)} />
+        )}
       </div>
     );
   }

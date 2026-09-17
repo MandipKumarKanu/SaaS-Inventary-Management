@@ -86,10 +86,11 @@ stripeWebhookRouter.post('/stripe', (req: Request, res: Response) => {
   }
 
   const event = result.event;
+  const deliveryAttempt = Number(req.headers['stripe-delivery-attempt'] ?? 1) || 1;
 
   // Phase 3: full processing — idempotency + subscription state machine +
   // result recording. Response contract from Phase 0/1 is preserved.
-  StripeWebhookService.processEvent(event)
+  StripeWebhookService.processEvent(event, { deliveryAttempt, rawPayload: req.body })
     .then(({ status }) => {
       if (status === 'failed') {
         // 500 makes Stripe retry the delivery — correct for transient errors.

@@ -1,10 +1,12 @@
-import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
+import React, { Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router';
 import { AppLayout } from './components/layout/AppLayout';
 import { AuthLayout } from './components/layout/AuthLayout';
 import { AdminLayout } from './components/layout/AdminLayout';
 import { Seo } from './components/seo/Seo';
 import { LoadingState } from './components/common/DataTable';
+import { useWorkspaceStore } from './store/useWorkspaceStore';
+import { useAuthStore } from './store/useAuthStore';
 
 // Route-level code splitting: each page becomes its own chunk, loaded on demand.
 // Pages use named exports, so map them to default for React.lazy.
@@ -88,6 +90,22 @@ const SaaSAdminPortalPage = lazyPage(
 const AdminWorkspaceDetailPage = lazyPage(
   () => import('./pages/admin/AdminWorkspaceDetailPage'),
   'AdminWorkspaceDetailPage'
+);
+const AdminUserDetailPage = lazyPage(
+  () => import('./pages/admin/AdminUserDetailPage'),
+  'AdminUserDetailPage'
+);
+const AdminPaymentDetailPage = lazyPage(
+  () => import('./pages/admin/AdminPaymentDetailPage'),
+  'AdminPaymentDetailPage'
+);
+const AdminWebhookEventDetailPage = lazyPage(
+  () => import('./pages/admin/AdminWebhookEventDetailPage'),
+  'AdminWebhookEventDetailPage'
+);
+const AdminAuditEventDetailPage = lazyPage(
+  () => import('./pages/admin/AdminAuditEventDetailPage'),
+  'AdminAuditEventDetailPage'
 );
 
 // Phase 6 Pages
@@ -184,6 +202,10 @@ export default function App() {
           <Route element={<AdminLayout />}>
             <Route path="/admin-portal" element={<SaaSAdminPortalPage />} />
             <Route path="/admin-portal/workspaces/:workspaceId" element={<AdminWorkspaceDetailPage />} />
+            <Route path="/admin-portal/users/:userId" element={<AdminUserDetailPage />} />
+            <Route path="/admin-portal/payments/:paymentId" element={<AdminPaymentDetailPage />} />
+            <Route path="/admin-portal/webhook-events/:eventId" element={<AdminWebhookEventDetailPage />} />
+            <Route path="/admin-portal/audit-events/:auditId" element={<AdminAuditEventDetailPage />} />
             <Route path="/system-health" element={<SystemHealthPage />} />
           </Route>
 
@@ -240,7 +262,7 @@ export default function App() {
 
           {/* Legacy paths → new /app/:workspaceSlug equivalents (redirects) */}
           <Route path="/" element={<Navigate to="/app" replace />} />
-          <Route path="/app" element={<LegacyAppRedirect />} />
+          <Route path="/app" element={<AppLayout />} />
           <Route path="/dashboard" element={<LegacyRedirect section="dashboard" />} />
           <Route path="/products" element={<LegacyRedirect section="products" />} />
           <Route path="/categories" element={<LegacyRedirect section="categories" />} />
@@ -288,18 +310,25 @@ export default function App() {
 
 function LegacyAppRedirect() {
   const navigate = useNavigate();
-  const { workspaces, activeWorkspace, fetchWorkspaces } = useWorkspaceStore();
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      let list = workspaces;
-      if (!activeWorkspace && list.length === 0) {
-        list = (await fetchWorkspaces()) || [];
+      const token = useAuthStore.getState().token;
+      if (!token) {
+        navigate('/login', { replace: true });
+        return;
+      }
+
+      let storeState = useWorkspaceStore.getState();
+      let list = storeState.workspaces;
+      if (!storeState.activeWorkspace && list.length === 0) {
+        list = (await storeState.fetchWorkspaces()) || [];
       }
       if (cancelled) return;
-      const target =
-        useWorkspaceStore.getState().activeWorkspace || list[0] || null;
+
+      storeState = useWorkspaceStore.getState();
+      const target = storeState.activeWorkspace || list[0] || null;
       if (target?.slug) {
         navigate(`/app/${target.slug}/dashboard`, { replace: true });
       } else {
@@ -309,7 +338,7 @@ function LegacyAppRedirect() {
     return () => {
       cancelled = true;
     };
-  }, [workspaces, activeWorkspace, fetchWorkspaces, navigate]);
+  }, [navigate]);
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
@@ -322,14 +351,44 @@ function LegacyRedirect({ section }) {
   const navigate = useNavigate();
   const params = useParams();
   const location = useLocation();
-  const { activeWorkspace } = useWorkspaceStore();
 
   useEffect(() => {
-    if (!activeWorkspace?.slug) return;
-    const extra = params.section ? `/${params.section}` : '';
-    const rest = location.pathname.replace(/^\/(settings\/)?[^/]+/, '');
-    navigate(`/app/${activeWorkspace.slug}/${section || params.section || ''}${extra || rest}`.replace(/\/+$/, '') || `/app/${activeWorkspace.slug}`, { replace: true });
-  }, [activeWorkspace, section, params.section, location.pathname, navigate]);
+    let cancelled = false;
+    (async () => {
+      const token = useAuthStore.getState().token;
+      if (!token) {
+        navigate('/login', { replace: true });
+        return;
+      }
+
+      let storeState = useWorkspaceStore.getState();
+      let ws = storeState.activeWorkspace;
+      if (!ws?.slug) {
+        let list = storeState.workspaces;
+        if (list.length === 0) {
+          list = (await storeState.fetchWorkspaces()) || [];
+        }
+        storeState = useWorkspaceStore.getState();
+        ws = storeState.activeWorkspace || list[0] || null;
+      }
+
+      if (cancelled) return;
+
+      if (ws?.slug) {
+        const pathSection = section || params.section || 'dashboard';
+        const extra = params.section && section ? `/${params.section}` : '';
+        const rest = location.pathname.replace(/^\/(settings\/)?[^/]+/, '');
+        const destination = (`/app/${ws.slug}/${pathSection}${extra || rest}`).replace(/\/+$/, '') || `/app/${ws.slug}`;
+        navigate(destination, { replace: true });
+      } else {
+        navigate('/app', { replace: true });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [section, params.section, location.pathname, navigate]);
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center">

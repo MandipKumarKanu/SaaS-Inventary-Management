@@ -19,16 +19,27 @@ import { logger } from '../config/logger.js';
 function buildDbUrl(): string {
   if (env.SUPABASE_DB_URL) return env.SUPABASE_DB_URL;
 
-  const host = env.SUPABASE_DB_HOST;
   const password = env.SUPABASE_DB_PASSWORD;
-  if (!host || !password) {
+  if (!password) {
     // Return null-ish config; pool creation will fail lazily with a clear error
     // only when a transaction is actually attempted (keeps dev/test lightweight).
     return '';
   }
-  const user = encodeURIComponent(env.SUPABASE_DB_USER || 'postgres');
+
+  const host = env.SUPABASE_DB_HOST || 'aws-0-ap-south-1.pooler.supabase.com';
+  const port = env.SUPABASE_DB_PORT || '6543';
+
+  let user = env.SUPABASE_DB_USER;
+  if (!user) {
+    const supabaseUrl = env.SUPABASE_URL || '';
+    const match = supabaseUrl.match(/https?:\/\/([^.]+)\.supabase/);
+    const projectRef = match ? match[1] : '';
+    user = projectRef ? `postgres.${projectRef}` : 'postgres';
+  }
+
+  const encodedUser = encodeURIComponent(user);
   const pwd = encodeURIComponent(password);
-  return `postgresql://${user}:${pwd}@${host}:5432/postgres`;
+  return `postgresql://${encodedUser}:${pwd}@${host}:${port}/postgres`;
 }
 
 const connectionString = buildDbUrl();

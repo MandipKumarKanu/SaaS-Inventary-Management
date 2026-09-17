@@ -13,7 +13,7 @@ export const useWorkspaceStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const res = await api.get('/workspaces');
-      const list = res.data || [];
+      const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
       set({ workspaces: list, isLoading: false });
 
       // Automatically select workspace if none selected or invalid
@@ -25,7 +25,7 @@ export const useWorkspaceStore = create((set, get) => ({
       }
       return list;
     } catch (err) {
-      set({ error: err.message, isLoading: false });
+      set({ error: err.message, isLoading: false, workspaces: [] });
       return [];
     }
   },
@@ -40,13 +40,13 @@ export const useWorkspaceStore = create((set, get) => ({
   fetchCurrentMember: async (workspaceId) => {
     try {
       const res = await api.get(`/workspaces/${workspaceId}/members/me`);
-      const member = res.data;
+      const member = res?.data || res || {};
       set({
-        membership: member,
+        membership: { ...member, workspace_id: workspaceId },
         permissions: member.permissions || [],
       });
     } catch {
-      set({ membership: null, permissions: [] });
+      set({ membership: { workspace_id: workspaceId, error: true }, permissions: [] });
     }
   },
 

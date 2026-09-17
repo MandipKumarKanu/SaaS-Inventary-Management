@@ -31,6 +31,7 @@ const envSchema = z.object({
   SUPABASE_DB_HOST: z.string().optional(),
   SUPABASE_DB_PASSWORD: z.string().optional(),
   SUPABASE_DB_USER: z.string().optional(),
+  SUPABASE_DB_PORT: z.string().optional(),
 
   // ── Phase 7b: DB-driven configuration (no hardcoded business data) ──
   // JSON array of plan rows seeded into subscription_plans by run-migrations.

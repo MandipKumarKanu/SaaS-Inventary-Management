@@ -43,7 +43,9 @@ export function GlobalSearchModal({ isOpen, onClose }) {
   }, [query, activeWorkspace]);
 
   const select = (path) => {
-    navigate(path);
+    const slug = activeWorkspace?.slug;
+    const target = slug && !path.startsWith('/app/') ? `/app/${slug}${path}` : path;
+    navigate(target);
     onClose();
   };
 
