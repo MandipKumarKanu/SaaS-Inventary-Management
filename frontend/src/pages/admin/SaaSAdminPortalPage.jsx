@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { api } from '../../lib/api';
 import { CardDescription } from '@/components/ui/card';
 import {
@@ -33,7 +33,9 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/sonner';
 
 export function SaaSAdminPortalPage() {
-  const [activeTab, setActiveTab] = useState('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'overview';
+  const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
 
   // Telemetry states
   const [overview, setOverview] = useState(null);
