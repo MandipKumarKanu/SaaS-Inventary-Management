@@ -8,6 +8,7 @@ import { BillingService } from '../billing/billing.service.js';
 import { isStripeConfigured, getStripe } from '../../config/stripe.js';
 import { ConfigService } from '../../services/config.service.js';
 import { logger } from '../../config/logger.js';
+import { checkIsPlatformAdmin } from '../../middleware/platform-admin.middleware.js';
 
 /**
  * SaaS Business Layer: platform-admin services (PRD §32, §35, §40, §42, §49,
@@ -1113,10 +1114,17 @@ export const AdminExportService = {
     if (entity === 'users') {
       const { data } = await supabaseAdmin
         .from('users')
-        .select('id, email, name, status, is_platform_admin, created_at')
+        .select('id, email, name, status, created_at')
         .order('created_at', { ascending: false })
         .limit(cap);
-      return { filename, csv: toCsv(data ?? [], ['id', 'email', 'name', 'status', 'is_platform_admin', 'created_at']) };
+
+      const enriched = await Promise.all(
+        (data ?? []).map(async (u) => ({
+          ...u,
+          is_platform_admin: await checkIsPlatformAdmin(u.id, u.email),
+        }))
+      );
+      return { filename, csv: toCsv(enriched, ['id', 'email', 'name', 'status', 'is_platform_admin', 'created_at']) };
     }
     if (entity === 'workspaces') {
       const { data } = await supabaseAdmin

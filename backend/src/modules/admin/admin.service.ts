@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../config/supabase.js';
 import { AppError } from '../../shared/errors.js';
 import { UsageService, UsageMetric } from '../../services/usage.service.js';
+import { checkIsPlatformAdmin } from '../../middleware/platform-admin.middleware.js';
 
 export class AdminService {
   /**
@@ -197,7 +198,7 @@ export class AdminService {
 
     let query = supabaseAdmin
       .from('users')
-      .select('id, email, name, avatar_url, status, is_platform_admin, created_at, updated_at', { count: 'exact' })
+      .select('id, email, name, avatar_url, status, created_at, updated_at', { count: 'exact' })
       .order(userSort.column, { ascending: userSort.ascending });
 
     if (options?.status) {
@@ -217,12 +218,16 @@ export class AdminService {
 
     const enriched = await Promise.all(
       (users || []).map(async (u) => {
-        const { count: wsCount } = await supabaseAdmin
-          .from('workspace_members')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', u.id);
+        const [{ count: wsCount }, isPlatformAdmin] = await Promise.all([
+          supabaseAdmin
+            .from('workspace_members')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', u.id),
+          checkIsPlatformAdmin(u.id, u.email),
+        ]);
         return {
           ...u,
+          is_platform_admin: isPlatformAdmin,
           workspaceCount: wsCount || 0,
         };
       })
@@ -253,11 +258,12 @@ export class AdminService {
       .from('users')
       .update({ status, updated_at: new Date().toISOString() })
       .eq('id', userId)
-      .select('id, email, name, status, is_platform_admin, created_at')
+      .select('id, email, name, status, created_at')
       .single();
 
     if (updateError) throw updateError;
-    return updated;
+    const isPlatformAdmin = await checkIsPlatformAdmin(userId, updated.email);
+    return { ...updated, is_platform_admin: isPlatformAdmin };
   }
 
   /**
@@ -300,11 +306,13 @@ export class AdminService {
   static async getUserDetail(userId: string) {
     const { data: user, error } = await supabaseAdmin
       .from('users')
-      .select('id, email, name, avatar_url, status, is_platform_admin, created_at, updated_at, last_login_at')
+      .select('id, email, name, avatar_url, status, created_at, updated_at')
       .eq('id', userId)
       .maybeSingle();
     if (error) throw error;
     if (!user) throw AppError.notFound('User not found');
+
+    const isPlatformAdmin = await checkIsPlatformAdmin(userId, user.email);
 
     // Memberships → workspace + role names (roles resolve through member_roles)
     const { data: memberships, error: memError } = await supabaseAdmin
@@ -338,7 +346,7 @@ export class AdminService {
       .limit(20);
 
     return {
-      user,
+      user: { ...user, is_platform_admin: isPlatformAdmin },
       memberships: (memberships ?? []).map((m: any) => ({
         id: m.id,
         status: m.status,
