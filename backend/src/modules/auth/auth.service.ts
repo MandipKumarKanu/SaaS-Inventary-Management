@@ -139,12 +139,30 @@ export class AuthService {
       throw AppError.unauthorized('Invalid email or password', 'INVALID_CREDENTIALS');
     }
 
-    // Get user profile
-    const { data: profile } = await supabaseAdmin
+    // Get user profile (or auto-provision if missing in public.users)
+    let { data: profile } = await supabaseAdmin
       .from('users')
       .select('id, email, name, avatar_url, status')
       .eq('id', data.user.id)
-      .single();
+      .maybeSingle();
+
+    if (!profile && data.user) {
+      const name = data.user.user_metadata?.name || email.split('@')[0] || 'User';
+      const { data: newProfile } = await supabaseAdmin
+        .from('users')
+        .upsert(
+          {
+            id: data.user.id,
+            email: email.toLowerCase(),
+            name,
+            status: 'active',
+          },
+          { onConflict: 'id' }
+        )
+        .select('id, email, name, avatar_url, status')
+        .single();
+      profile = newProfile || null;
+    }
 
     if (profile?.status === 'suspended') {
       throw AppError.forbidden('Your account has been suspended', 'ACCOUNT_SUSPENDED');

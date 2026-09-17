@@ -310,7 +310,7 @@ export class AdminService {
     const { data: memberships, error: memError } = await supabaseAdmin
       .from('workspace_members')
       .select(
-        `id, status, created_at, workspace_id,
+        `id, status, joined_at, workspace_id,
          workspace:workspaces(id, name, slug, status),
          member_roles(role:roles(id, name))`
       )
@@ -342,7 +342,8 @@ export class AdminService {
       memberships: (memberships ?? []).map((m: any) => ({
         id: m.id,
         status: m.status,
-        created_at: m.created_at,
+        joined_at: m.joined_at,
+        created_at: m.joined_at,
         workspace: m.workspace ?? null,
         role_name: (m.member_roles as any[])?.[0]?.role?.name ?? null,
       })),
@@ -457,7 +458,7 @@ export class AdminService {
     const { data: members, error: membersError } = await supabaseAdmin
       .from('workspace_members')
       .select(
-        `id, status, created_at,
+        `id, status, joined_at,
          user:users(id, email, name, status),
          member_roles(role:roles(id, name))`
       )
@@ -503,7 +504,8 @@ export class AdminService {
       members: (members ?? []).map((m: any) => ({
         id: m.id,
         status: m.status,
-        created_at: m.created_at,
+        joined_at: m.joined_at,
+        created_at: m.joined_at,
         email: m.user?.email ?? null,
         name: m.user?.name ?? null,
         user_status: m.user?.status ?? null,
