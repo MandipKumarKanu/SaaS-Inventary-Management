@@ -13,13 +13,9 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { Button } from '@/components/ui/button';
 
 /**
- * Phase 9 (PRD §6): the URL is the workspace authority.
- *
- * Resolves :workspaceSlug → workspace + membership + permissions, syncs the
- * store, then renders the matched page. Handles:
- *   - unknown slug            → not-found denial (with switcher escape hatch)
- *   - slug valid, not member  → denial page (server would 403 anyway)
- *   - slug valid, member      → Outlet (all existing pages read the store)
+ * AppLayout: Workspace layout authority.
+ * Resolves :workspaceSlug against store workspaces & membership,
+ * handles legacy redirects, 0 workspaces UI, and unauthorized access.
  */
 export function AppLayout() {
   const navigate = useNavigate();
@@ -29,8 +25,10 @@ export function AppLayout() {
     workspaces,
     activeWorkspace,
     membership,
+    isLoading: isWsLoading,
     fetchWorkspaces,
     setActiveWorkspace,
+    fetchCurrentMember,
   } = useWorkspaceStore();
 
   const fetchProfile = useAuthStore((state) => state.fetchProfile);
@@ -38,47 +36,33 @@ export function AppLayout() {
   const [isCreateWsOpen, setIsCreateWsOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-  const [isResolving, setIsResolving] = useState(true);
-  const [resolution, setResolution] = useState('ok'); // 'ok' | 'not-found' | 'not-member'
 
+  // 1. Auth Guard
   useEffect(() => {
     if (!token) {
       navigate('/login');
     }
   }, [token, navigate]);
 
-  // Boot: load the workspace list once (idempotent — store caches).
+  // 2. Boot: load workspaces once if store is empty
   useEffect(() => {
     if (!token) return;
-    if (workspaces.length === 0) {
+    if (workspaces.length === 0 && !isWsLoading) {
       fetchWorkspaces();
     }
     if (fetchProfile) fetchProfile();
-  }, [token, workspaces.length, fetchWorkspaces, fetchProfile]);
+  }, [token, workspaces.length, isWsLoading, fetchWorkspaces, fetchProfile]);
 
-  // Resolve the URL slug against the workspace list.
+  // 3. Sync route slug with activeWorkspace & fetch membership if missing
   useEffect(() => {
     if (!token) return;
-
-    const isLoadingWorkspaces = useWorkspaceStore.getState().isLoading;
-
-    // Handle user with no workspaces
-    if (workspaces.length === 0) {
-      if (isLoadingWorkspaces) {
-        setIsResolving(true);
-        return;
-      }
-      setIsResolving(false);
-      return;
-    }
+    if (workspaces.length === 0) return;
 
     if (!workspaceSlug) {
       const target = activeWorkspace || workspaces[0];
       const slugOrId = target?.slug || target?.id;
       if (slugOrId) {
         navigate(`/app/${slugOrId}/dashboard`, { replace: true });
-      } else {
-        setIsResolving(false);
       }
       return;
     }
@@ -87,43 +71,21 @@ export function AppLayout() {
       (w) => w.slug === workspaceSlug || w.id === workspaceSlug
     );
 
-    if (!matched) {
-      setResolution('not-found');
-      setIsResolving(false);
-      return;
+    if (matched) {
+      if (activeWorkspace?.id !== matched.id) {
+        setActiveWorkspace(matched);
+      } else if (!membership || membership.workspace_id !== matched.id) {
+        fetchCurrentMember(matched.id);
+      }
     }
-
-    if (activeWorkspace?.id !== matched.id) {
-      // setActiveWorkspace also fetches the membership/permissions for the
-      // matched workspace (store behavior — unchanged for pages).
-      setActiveWorkspace(matched);
-    }
-    setResolution('ok');
-    setIsResolving(false);
-  }, [token, workspaceSlug, workspaces, activeWorkspace, setActiveWorkspace, navigate]);
-
-  // Load the membership for the resolved workspace before rendering children.
-  useEffect(() => {
-    if (resolution !== 'ok') return;
-    if (!activeWorkspace) return;
-    if (membership === null || membership.workspace_id !== activeWorkspace.id) {
-      // fetchCurrentMember is triggered by setActiveWorkspace; but when the
-      // store already had the right workspace (e.g. refresh), ensure it ran.
-      setIsResolving(true);
-      let cancelled = false;
-      (async () => {
-        await useWorkspaceStore.getState().fetchCurrentMember(activeWorkspace.id);
-        if (!cancelled) setIsResolving(false);
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [resolution, activeWorkspace, membership]);
+  }, [token, workspaceSlug, workspaces, activeWorkspace, membership, setActiveWorkspace, fetchCurrentMember, navigate]);
 
   if (!user || !token) return null;
 
-  if (isResolving) {
+  // 4. Loading state: active if workspaces are fetching or membership for activeWorkspace is pending
+  const isResolving = isWsLoading || (activeWorkspace && (!membership || membership.workspace_id !== activeWorkspace.id));
+
+  if (isResolving && workspaces.length > 0) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <LoadingState message="Opening workspace…" />
@@ -131,8 +93,8 @@ export function AppLayout() {
     );
   }
 
-  // Handle case where logged-in user has 0 workspaces
-  if (workspaces.length === 0) {
+  // 5. Handle user with 0 workspaces
+  if (workspaces.length === 0 && !isWsLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <div className="w-full max-w-md space-y-6 rounded-xl border bg-card p-8 text-center text-card-foreground shadow-lg">
@@ -156,15 +118,16 @@ export function AppLayout() {
     );
   }
 
-  if (resolution !== 'ok' || !activeWorkspace) {
+  // 6. Handle unknown workspace slug
+  const matchedWorkspace = workspaceSlug
+    ? workspaces.find((w) => w.slug === workspaceSlug || w.id === workspaceSlug)
+    : activeWorkspace;
+
+  if (workspaceSlug && !matchedWorkspace) {
     return (
       <PermissionDeniedPage
-        title={resolution === 'not-found' ? 'Workspace not found' : undefined}
-        description={
-          resolution === 'not-found'
-            ? `No workspace matches "${workspaceSlug}". It may have been renamed, or you may not be a member.`
-            : undefined
-        }
+        title="Workspace not found"
+        description={`No workspace matches "${workspaceSlug}". It may have been renamed, or you may not be a member.`}
       />
     );
   }
