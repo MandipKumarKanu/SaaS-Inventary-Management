@@ -110,8 +110,8 @@ const webhookLimiter = rateLimit({
 
 // Auth rate limiting (stricter)
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
+  windowMs: 10 * 60 * 1000,
+  max: 30,
   message: { success: false, error: { code: 'RATE_LIMIT', message: 'Too many authentication attempts.' } },
 });
 
