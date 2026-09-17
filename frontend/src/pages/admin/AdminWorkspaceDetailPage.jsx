@@ -190,16 +190,6 @@ export function AdminWorkspaceDetailPage() {
     }
   }, [workspaceId]);
 
-  useEffect(() => {
-    loadDetail();
-    loadPayments();
-    fetchPlanOptions();
-  }, [loadDetail, loadPayments, fetchPlanOptions]);
-
-  useEffect(() => {
-    if (activeTab === 'diagnostics' && !diagnostics) loadDiagnostics();
-  }, [activeTab, diagnostics, loadDiagnostics]);
-
   const fetchPlanOptions = useCallback(async () => {
     try {
       // Plans are public catalog data for authenticated admins; resolve via
@@ -215,6 +205,16 @@ export function AdminWorkspaceDetailPage() {
       setPlanOptions([]);
     }
   }, []);
+
+  useEffect(() => {
+    loadDetail();
+    loadPayments();
+    fetchPlanOptions();
+  }, [loadDetail, loadPayments, fetchPlanOptions]);
+
+  useEffect(() => {
+    if (activeTab === 'diagnostics' && !diagnostics) loadDiagnostics();
+  }, [activeTab, diagnostics, loadDiagnostics]);
 
   const runAction = async (fn, successMessage) => {
     try {
