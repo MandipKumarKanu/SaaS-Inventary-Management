@@ -54,7 +54,7 @@ api.interceptors.request.use((config) => {
   return Promise.reject(error);
 });
 
-// Response interceptor: handle 401 unauth
+// Response interceptor: handle 401 unauth & extract detailed error messages
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
@@ -63,7 +63,30 @@ api.interceptors.response.use(
       localStorage.removeItem('access_token');
       localStorage.removeItem('user');
     }
-    const message = error.response?.data?.error?.message || error.message || 'An unexpected error occurred';
-    return Promise.reject(new Error(message));
+
+    const errData = error.response?.data?.error;
+    let message = errData?.message || error.message || 'An unexpected error occurred';
+
+    // Format detailed validation or field errors if present
+    if (errData?.details && Array.isArray(errData.details) && errData.details.length > 0) {
+      message = `${message}: ${errData.details.join(', ')}`;
+    } else if (errData?.fields && typeof errData.fields === 'object') {
+      const fieldErrors = Object.entries(errData.fields)
+        .map(([field, errMsg]) => `${field}: ${errMsg}`)
+        .filter(Boolean)
+        .join(', ');
+      if (fieldErrors) {
+        message = `${message}: ${fieldErrors}`;
+      }
+    }
+
+    const customErr = new Error(message);
+    if (errData) {
+      customErr.code = errData.code;
+      customErr.details = errData.details;
+      customErr.fields = errData.fields;
+    }
+
+    return Promise.reject(customErr);
   }
 );

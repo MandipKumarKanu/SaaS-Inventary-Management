@@ -72,7 +72,16 @@ export function AppLayout() {
       return;
     }
 
-    if (!workspaceSlug) return;
+    if (!workspaceSlug) {
+      const target = activeWorkspace || workspaces[0];
+      const slugOrId = target?.slug || target?.id;
+      if (slugOrId) {
+        navigate(`/app/${slugOrId}/dashboard`, { replace: true });
+      } else {
+        setIsResolving(false);
+      }
+      return;
+    }
 
     const matched = workspaces.find(
       (w) => w.slug === workspaceSlug || w.id === workspaceSlug
@@ -91,7 +100,7 @@ export function AppLayout() {
     }
     setResolution('ok');
     setIsResolving(false);
-  }, [token, workspaceSlug, workspaces, activeWorkspace?.id, setActiveWorkspace]);
+  }, [token, workspaceSlug, workspaces, activeWorkspace, setActiveWorkspace, navigate]);
 
   // Load the membership for the resolved workspace before rendering children.
   useEffect(() => {

@@ -262,7 +262,7 @@ export default function App() {
 
           {/* Legacy paths → new /app/:workspaceSlug equivalents (redirects) */}
           <Route path="/" element={<Navigate to="/app" replace />} />
-          <Route path="/app" element={<AppLayout />} />
+          <Route path="/app" element={<LegacyAppRedirect />} />
           <Route path="/dashboard" element={<LegacyRedirect section="dashboard" />} />
           <Route path="/products" element={<LegacyRedirect section="products" />} />
           <Route path="/categories" element={<LegacyRedirect section="categories" />} />
@@ -322,17 +322,18 @@ function LegacyAppRedirect() {
 
       let storeState = useWorkspaceStore.getState();
       let list = storeState.workspaces;
-      if (!storeState.activeWorkspace && list.length === 0) {
+      if (list.length === 0) {
         list = (await storeState.fetchWorkspaces()) || [];
       }
       if (cancelled) return;
 
       storeState = useWorkspaceStore.getState();
       const target = storeState.activeWorkspace || list[0] || null;
-      if (target?.slug) {
-        navigate(`/app/${target.slug}/dashboard`, { replace: true });
+      const slugOrId = target?.slug || target?.id;
+      if (slugOrId) {
+        navigate(`/app/${slugOrId}/dashboard`, { replace: true });
       } else {
-        navigate('/login', { replace: true });
+        navigate('/app/_/dashboard', { replace: true });
       }
     })();
     return () => {
@@ -363,22 +364,24 @@ function LegacyRedirect({ section }) {
 
       let storeState = useWorkspaceStore.getState();
       let ws = storeState.activeWorkspace;
-      if (!ws?.slug) {
+      let slugOrId = ws?.slug || ws?.id;
+      if (!slugOrId) {
         let list = storeState.workspaces;
         if (list.length === 0) {
           list = (await storeState.fetchWorkspaces()) || [];
         }
         storeState = useWorkspaceStore.getState();
         ws = storeState.activeWorkspace || list[0] || null;
+        slugOrId = ws?.slug || ws?.id;
       }
 
       if (cancelled) return;
 
-      if (ws?.slug) {
+      if (slugOrId) {
         const pathSection = section || params.section || 'dashboard';
         const extra = params.section && section ? `/${params.section}` : '';
         const rest = location.pathname.replace(/^\/(settings\/)?[^/]+/, '');
-        const destination = (`/app/${ws.slug}/${pathSection}${extra || rest}`).replace(/\/+$/, '') || `/app/${ws.slug}`;
+        const destination = (`/app/${slugOrId}/${pathSection}${extra || rest}`).replace(/\/+$/, '') || `/app/${slugOrId}`;
         navigate(destination, { replace: true });
       } else {
         navigate('/app', { replace: true });

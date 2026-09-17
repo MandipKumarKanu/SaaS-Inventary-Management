@@ -24,6 +24,26 @@ router.get('/', authMiddleware as any, async (req: Request, res: Response, next:
 });
 
 /**
+ * GET /api/v1/workspaces/check-slug
+ * Check if a workspace slug is available
+ */
+router.get('/check-slug', authMiddleware as any, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const slug = (req.query.slug as string || '').trim();
+    if (!slug) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Slug query parameter is required' },
+      });
+    }
+    const result = await WorkspaceService.checkSlug(slug);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * POST /api/v1/workspaces
  * Create a new workspace
  */
@@ -34,6 +54,7 @@ router.post('/', authMiddleware as any, async (req: Request, res: Response, next
     const workspace = await WorkspaceService.create({
       name: body.name,
       slug: body.slug,
+      currency: body.currency,
       userId: authReq.user.id,
     });
     res.status(201).json({ success: true, data: workspace });

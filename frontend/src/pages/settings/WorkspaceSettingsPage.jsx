@@ -8,10 +8,27 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+const CURRENCY_OPTIONS = [
+  { code: 'NPR', label: 'NPR – Nepalese Rupee (रू)' },
+  { code: 'INR', label: 'INR – Indian Rupee (₹)' },
+  { code: 'USD', label: 'USD – US Dollar ($)' },
+  { code: 'EUR', label: 'EUR – Euro (€)' },
+  { code: 'GBP', label: 'GBP – British Pound (£)' },
+  { code: 'AUD', label: 'AUD – Australian Dollar (A$)' },
+  { code: 'CAD', label: 'CAD – Canadian Dollar (C$)' },
+  { code: 'AED', label: 'AED – UAE Dirham (AED)' },
+  { code: 'SGD', label: 'SGD – Singapore Dollar (S$)' },
+  { code: 'JPY', label: 'JPY – Japanese Yen (¥)' },
+];
 
 export function WorkspaceSettingsPage() {
   const { activeWorkspace, fetchWorkspaces } = useWorkspaceStore();
   const [name, setName] = useState(activeWorkspace?.name || '');
+  const [currency, setCurrency] = useState(
+    activeWorkspace?.settings?.currency || activeWorkspace?.settings?.default_currency || 'NPR'
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -30,7 +47,15 @@ export function WorkspaceSettingsPage() {
     setMessage(null);
 
     try {
-      await api.patch(`/workspaces/${activeWorkspace.id}`, { name });
+      const updatedSettings = {
+        ...(activeWorkspace.settings || {}),
+        currency: currency.toUpperCase(),
+        default_currency: currency.toUpperCase(),
+      };
+      await api.patch(`/workspaces/${activeWorkspace.id}`, {
+        name,
+        settings: updatedSettings,
+      });
       setMessage({ type: 'success', text: 'Workspace details updated successfully!' });
       fetchWorkspaces();
     } catch (err) {
@@ -57,7 +82,7 @@ export function WorkspaceSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>General Details</CardTitle>
-          <CardDescription>Update the workspace name and view identifiers.</CardDescription>
+          <CardDescription>Update workspace name, default currency, and view identifiers.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -69,6 +94,25 @@ export function WorkspaceSettingsPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
+            </Field>
+
+            <Field
+              label="Default Base Currency"
+              htmlFor="workspace-currency"
+              hint="Primary currency used for inventory pricing and valuation reports"
+            >
+              <Select value={currency} onValueChange={setCurrency}>
+                <SelectTrigger id="workspace-currency" className="w-full">
+                  <SelectValue placeholder="Select primary currency" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CURRENCY_OPTIONS.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
 
             <Field label="URL Slug" htmlFor="workspace-slug" hint="Slug cannot be changed after creation.">

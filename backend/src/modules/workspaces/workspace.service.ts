@@ -11,8 +11,22 @@ import { ConfigService } from '../../services/config.service.js';
 interface CreateWorkspaceParams {
   name: string;
   slug?: string;
+  currency?: string;
   userId: string;
 }
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  NPR: 'रू',
+  INR: '₹',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  AUD: 'A$',
+  CAD: 'C$',
+  AED: 'AED',
+  SGD: 'S$',
+  JPY: '¥',
+};
 
 export class WorkspaceService {
   /**
@@ -25,7 +39,9 @@ export class WorkspaceService {
    * 6. Initialize usage tracking
    */
   static async create(params: CreateWorkspaceParams) {
-    const { name, userId } = params;
+    const { name, userId, currency = 'NPR' } = params;
+    const baseCurrency = (currency || 'NPR').toUpperCase();
+    const symbol = CURRENCY_SYMBOLS[baseCurrency] || '$';
 
     // Generate slug from name if not provided
     const slug = params.slug || this.generateSlug(name);
@@ -35,7 +51,7 @@ export class WorkspaceService {
       .from('workspaces')
       .select('id')
       .eq('slug', slug)
-      .single();
+      .maybeSingle();
 
     if (existing) {
       throw AppError.conflict('A workspace with this slug already exists', 'SLUG_EXISTS');
@@ -44,16 +60,61 @@ export class WorkspaceService {
     // 1. Create workspace
     const { data: workspace, error: wsError } = await supabaseAdmin
       .from('workspaces')
-      .insert({ name, slug, created_by: userId })
+      .insert({
+        name,
+        slug,
+        created_by: userId,
+        settings: {
+          currency: baseCurrency,
+          default_currency: baseCurrency,
+          currency_symbol: symbol,
+        },
+      })
       .select()
       .single();
 
     if (wsError || !workspace) {
       logger.error('Failed to create workspace', { error: wsError?.message });
-      throw AppError.internal('Failed to create workspace');
+      throw AppError.internal(wsError?.message || 'Failed to create workspace');
+    }
+
+    // Seed base currency rate row
+    try {
+      await supabaseAdmin
+        .from('currency_rates')
+        .insert({
+          workspace_id: workspace.id,
+          currency_code: baseCurrency,
+          symbol: symbol,
+          exchange_rate: 1.0,
+        });
+    } catch (err: any) {
+      logger.warn('Failed to seed base currency rate', { error: err?.message });
     }
 
     try {
+      // Ensure user profile exists in public.users table before inserting membership
+      const { data: userProfile } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (!userProfile) {
+        const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+        if (authUser?.user) {
+          await supabaseAdmin.from('users').upsert(
+            {
+              id: userId,
+              email: authUser.user.email?.toLowerCase() || '',
+              name: authUser.user.user_metadata?.name || authUser.user.email?.split('@')[0] || 'User',
+              status: 'active',
+            },
+            { onConflict: 'id' }
+          );
+        }
+      }
+
       // 2. Create owner membership
       const { data: member, error: memberError } = await supabaseAdmin
         .from('workspace_members')
@@ -133,7 +194,7 @@ export class WorkspaceService {
       // Rollback: delete workspace (cascades members, roles, etc.)
       await supabaseAdmin.from('workspaces').delete().eq('id', workspace.id);
       logger.error('Workspace creation rollback', { error: err.message });
-      throw AppError.internal('Failed to create workspace');
+      throw AppError.internal(err.message || 'Failed to create workspace');
     }
   }
 
@@ -276,6 +337,40 @@ export class WorkspaceService {
     });
 
     return data;
+  }
+
+  /**
+   * Check if a workspace slug is available
+   */
+  static async checkSlug(slug: string): Promise<{ available: boolean; reason: string; message: string }> {
+    const isValidFormat = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
+    if (!isValidFormat) {
+      return {
+        available: false,
+        reason: 'FORMAT_INVALID',
+        message: 'Slug must be lowercase alphanumeric with hyphens (e.g. acme-corp)',
+      };
+    }
+
+    const { data: existing } = await supabaseAdmin
+      .from('workspaces')
+      .select('id')
+      .eq('slug', slug)
+      .maybeSingle();
+
+    if (existing) {
+      return {
+        available: false,
+        reason: 'TAKEN',
+        message: 'A workspace with this slug already exists',
+      };
+    }
+
+    return {
+      available: true,
+      reason: 'AVAILABLE',
+      message: 'Slug is available!',
+    };
   }
 
   /**

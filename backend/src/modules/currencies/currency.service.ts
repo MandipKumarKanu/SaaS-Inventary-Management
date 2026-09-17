@@ -20,8 +20,18 @@ export class CurrencyService {
     if (error) throw error;
     const total = count ?? data?.length ?? 0;
     if (total === 0) {
-      // Return default USD currency rate if none exist
-      const fallback = [{ currency_code: 'USD', symbol: '$', exchange_rate: 1.0, is_base: true }];
+      // Lookup workspace default currency settings
+      const { data: ws } = await supabaseAdmin
+        .from('workspaces')
+        .select('settings')
+        .eq('id', workspaceId)
+        .maybeSingle();
+
+      const settings = (ws?.settings as Record<string, any>) || {};
+      const baseCode = (settings.currency || settings.default_currency || 'NPR').toUpperCase();
+      const baseSymbol = settings.currency_symbol || (baseCode === 'NPR' ? 'रू' : baseCode === 'INR' ? '₹' : '$');
+
+      const fallback = [{ currency_code: baseCode, symbol: baseSymbol, exchange_rate: 1.0, is_base: true }];
       if (page === undefined) {
         return {
           data: fallback,

@@ -50,10 +50,10 @@ export const useWorkspaceStore = create((set, get) => ({
     }
   },
 
-  createWorkspace: async (name, slug) => {
+  createWorkspace: async (name, slug, currency = 'NPR') => {
     set({ isLoading: true, error: null });
     try {
-      const res = await api.post('/workspaces', { name, slug });
+      const res = await api.post('/workspaces', { name, slug, currency });
       const newWs = res.data;
       set((state) => ({
         workspaces: [newWs, ...state.workspaces],
