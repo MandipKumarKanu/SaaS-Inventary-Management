@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router';
-import { ShieldAlert, ArrowRight, Building2 } from 'lucide-react';
+import { ShieldAlert, ArrowRight, Building2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
+import { CreateWorkspaceModal } from '../../pages/settings/CreateWorkspaceModal';
 
 /**
  * Phase 9 (PRD §54): full-page permission denial.
@@ -12,6 +14,7 @@ import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 export function PermissionDeniedPage({ permission, title, description }) {
   const navigate = useNavigate();
   const { workspaces, activeWorkspace, setActiveWorkspace } = useWorkspaceStore();
+  const [isCreateWsOpen, setIsCreateWsOpen] = useState(false);
 
   const otherWorkspaces = workspaces.filter((w) => w.id !== activeWorkspace?.id);
 
@@ -35,11 +38,17 @@ export function PermissionDeniedPage({ permission, title, description }) {
         <Button onClick={() => navigate(-1)} variant="outline">
           Go back
         </Button>
-        <Button asChild>
-          <Link to="/app">
-            Dashboard <ArrowRight className="h-4 w-4" />
-          </Link>
-        </Button>
+        {workspaces.length === 0 ? (
+          <Button onClick={() => setIsCreateWsOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" /> Create Workspace
+          </Button>
+        ) : (
+          <Button asChild>
+            <Link to="/app">
+              Dashboard <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        )}
       </div>
       {otherWorkspaces.length > 0 && (
         <div className="mt-2 max-w-xs space-y-2">
@@ -63,6 +72,9 @@ export function PermissionDeniedPage({ permission, title, description }) {
             ))}
           </div>
         </div>
+      )}
+      {isCreateWsOpen && (
+        <CreateWorkspaceModal onClose={() => setIsCreateWsOpen(false)} />
       )}
     </div>
   );

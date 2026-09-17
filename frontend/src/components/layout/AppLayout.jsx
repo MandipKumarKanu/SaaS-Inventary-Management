@@ -58,7 +58,7 @@ export function AppLayout() {
     if (!token) return;
     if (workspaces.length === 0) return;
 
-    if (!workspaceSlug) {
+    if (!workspaceSlug || workspaceSlug === '_') {
       const target = activeWorkspace || workspaces[0];
       const slugOrId = target?.slug || target?.id;
       if (slugOrId) {
@@ -85,7 +85,7 @@ export function AppLayout() {
   // 4. Loading state: active if workspaces are fetching or membership for activeWorkspace is pending
   const isResolving = isWsLoading || (activeWorkspace && (!membership || membership.workspace_id !== activeWorkspace.id));
 
-  if (isResolving && workspaces.length > 0) {
+  if (isResolving) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <LoadingState message="Opening workspace…" />
@@ -110,6 +110,16 @@ export function AppLayout() {
           <Button onClick={() => setIsCreateWsOpen(true)} size="lg" className="w-full">
             <Plus className="mr-2 h-4 w-4" /> Create Workspace
           </Button>
+          {user?.is_platform_admin && (
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full mt-2"
+              onClick={() => navigate('/admin-portal')}
+            >
+              Go to SaaS Admin Portal
+            </Button>
+          )}
         </div>
         {isCreateWsOpen && (
           <CreateWorkspaceModal onClose={() => setIsCreateWsOpen(false)} />
@@ -119,11 +129,11 @@ export function AppLayout() {
   }
 
   // 6. Handle unknown workspace slug
-  const matchedWorkspace = workspaceSlug
+  const matchedWorkspace = workspaceSlug && workspaceSlug !== '_'
     ? workspaces.find((w) => w.slug === workspaceSlug || w.id === workspaceSlug)
     : activeWorkspace;
 
-  if (workspaceSlug && !matchedWorkspace) {
+  if (workspaceSlug && workspaceSlug !== '_' && !matchedWorkspace) {
     return (
       <PermissionDeniedPage
         title="Workspace not found"
