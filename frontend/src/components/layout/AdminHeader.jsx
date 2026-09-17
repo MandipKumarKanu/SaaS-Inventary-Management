@@ -3,11 +3,7 @@ import {
   Menu,
   ChevronRight,
   ShieldCheck,
-  Search,
   ArrowLeft,
-  Bell,
-  Sparkles,
-  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -42,7 +38,7 @@ export function AdminHeader({ onOpenMobile, isCollapsed, onToggleCollapse }) {
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 w-full items-center justify-between border-b border-border/60 bg-background/95 px-4 backdrop-blur-md md:px-7">
+    <header className="sticky top-0 z-20 flex h-16 w-full items-center justify-between border-b border-border bg-background px-4 md:px-7">
       <div className="flex items-center gap-3">
         {/* Mobile Menu Button */}
         <Button
@@ -58,9 +54,9 @@ export function AdminHeader({ onOpenMobile, isCollapsed, onToggleCollapse }) {
         <div className="flex items-center gap-2 text-sm font-medium">
           <Link
             to="/admin-portal"
-            className="flex items-center gap-1.5 text-muted-foreground hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+            className="flex items-center gap-1.5 text-muted-foreground hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
           >
-            <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+            <ShieldCheck className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
             <span className="hidden sm:inline">Admin Portal</span>
           </Link>
           <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
@@ -77,7 +73,7 @@ export function AdminHeader({ onOpenMobile, isCollapsed, onToggleCollapse }) {
           variant="outline"
           className="hidden lg:flex items-center gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 text-xs font-semibold"
         >
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
           Platform Active
         </Badge>
 
@@ -87,9 +83,9 @@ export function AdminHeader({ onOpenMobile, isCollapsed, onToggleCollapse }) {
           variant="outline"
           size="sm"
           onClick={() => navigate('/dashboard')}
-          className="gap-2 border-purple-500/20 bg-purple-500/5 text-purple-700 dark:text-purple-300 hover:bg-purple-500/10 hover:border-purple-500/40"
+          className="gap-2 text-xs font-medium"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Workspace Panel</span>
         </Button>
       </div>

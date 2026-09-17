@@ -98,7 +98,7 @@ export function AdminLayout() {
         />
 
         {/* Dynamic Page Outlet */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-7 custom-scrollbar bg-slate-50/50 dark:bg-slate-950/40">
+        <main className="flex-1 overflow-y-auto p-4 md:p-7 custom-scrollbar bg-slate-50 dark:bg-slate-950">
           <div className="mx-auto max-w-[1500px]">
             <Outlet />
           </div>
