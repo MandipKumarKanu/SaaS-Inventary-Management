@@ -1312,6 +1312,7 @@ export function SaaSAdminPortalPage() {
 
 function CouponManagerPanel() {
   const [coupons, setCoupons] = useState([]);
+  const [selectedCouponIds, setSelectedCouponIds] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -1394,6 +1395,20 @@ function CouponManagerPanel() {
       await loadCoupons();
     } catch (err) {
       toast.error(err.message || 'Failed to update coupon');
+    }
+  };
+
+  const handleBulkCoupons = async (active) => {
+    if (selectedCouponIds.length === 0) return;
+    try {
+      await Promise.all(
+        selectedCouponIds.map((id) => api.patch(`/admin/coupons/${id}`, { active }))
+      );
+      toast.success(`${selectedCouponIds.length} coupons ${active ? 'enabled' : 'disabled'}`);
+      setSelectedCouponIds([]);
+      await loadCoupons();
+    } catch (err) {
+      toast.error(err.message || 'Bulk update failed');
     }
   };
 
