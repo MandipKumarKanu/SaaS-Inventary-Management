@@ -8,6 +8,8 @@ import { LoadingState } from './components/common/DataTable';
 import { useWorkspaceStore } from './store/useWorkspaceStore';
 import { useAuthStore } from './store/useAuthStore';
 
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+
 // Route-level code splitting: each page becomes its own chunk, loaded on demand.
 // Pages use named exports, so map them to default for React.lazy.
 const lazyPage = (importFn, exportName) =>
@@ -190,114 +192,116 @@ export default function App() {
   return (
     <BrowserRouter>
       <Seo />
-      <Suspense fallback={<PageFallback />}>
-        <Routes>
-          {/* Auth Routes */}
-          <Route element={<AuthLayout />}>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignupPage />} />
-          </Route>
+      <ErrorBoundary>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            {/* Auth Routes */}
+            <Route element={<AuthLayout />}>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/signup" element={<SignupPage />} />
+            </Route>
 
-          {/* Standalone SaaS Platform Admin Portal (Super Admin Only) */}
-          <Route element={<AdminLayout />}>
-            <Route path="/admin-portal" element={<SaaSAdminPortalPage />} />
-            <Route path="/admin-portal/workspaces/:workspaceId" element={<AdminWorkspaceDetailPage />} />
-            <Route path="/admin-portal/users/:userId" element={<AdminUserDetailPage />} />
-            <Route path="/admin-portal/payments/:paymentId" element={<AdminPaymentDetailPage />} />
-            <Route path="/admin-portal/webhook-events/:eventId" element={<AdminWebhookEventDetailPage />} />
-            <Route path="/admin-portal/audit-events/:auditId" element={<AdminAuditEventDetailPage />} />
-            <Route path="/system-health" element={<SystemHealthPage />} />
-          </Route>
+            {/* Standalone SaaS Platform Admin Portal (Super Admin Only) */}
+            <Route element={<AdminLayout />}>
+              <Route path="/admin-portal" element={<SaaSAdminPortalPage />} />
+              <Route path="/admin-portal/workspaces/:workspaceId" element={<AdminWorkspaceDetailPage />} />
+              <Route path="/admin-portal/users/:userId" element={<AdminUserDetailPage />} />
+              <Route path="/admin-portal/payments/:paymentId" element={<AdminPaymentDetailPage />} />
+              <Route path="/admin-portal/webhook-events/:eventId" element={<AdminWebhookEventDetailPage />} />
+              <Route path="/admin-portal/audit-events/:auditId" element={<AdminAuditEventDetailPage />} />
+              <Route path="/system-health" element={<SystemHealthPage />} />
+            </Route>
 
-          {/*
-            Protected App Routes — workspace in the URL (PRD §6).
-            AppLayout resolves :workspaceSlug → active workspace + membership.
-          */}
-          <Route path="/app/:workspaceSlug" element={<AppLayout />}>
-            <Route index element={<DashboardPage />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="ai-copilot" element={<AICopilotAssistantPage />} />
-            <Route path="products" element={<ProductsPage />} />
-            <Route path="categories" element={<CategoriesPage />} />
-            <Route path="warehouses" element={<WarehousesPage />} />
-            <Route path="inventory" element={<InventoryPage />} />
-            <Route path="transfers" element={<TransfersPage />} />
-            <Route path="transfers/:id" element={<TransferDetailPage />} />
-            <Route path="counts" element={<CycleCountPage />} />
-            <Route path="counts/:id" element={<CountDetailPage />} />
-            <Route path="scanner" element={<BarcodeScannerPage />} />
-            <Route path="batches" element={<BatchesPage />} />
-            <Route path="suppliers" element={<SuppliersPage />} />
-            <Route path="customers" element={<CustomersPage />} />
-            <Route path="purchases" element={<PurchaseOrdersPage />} />
-            <Route path="purchases/:id" element={<PODetailPage />} />
-            <Route path="sales" element={<SalesOrdersPage />} />
-            <Route path="sales/:id" element={<SODetailPage />} />
-            <Route path="returns" element={<ReturnsPage />} />
-            <Route path="returns/:id" element={<ReturnDetailPage />} />
-            <Route path="reorder" element={<ReorderRecommendationsPage />} />
-            <Route path="automation" element={<AutomationRulesPage />} />
-            <Route path="abc-analysis" element={<ABCAnalysisPage />} />
-            <Route path="forecast" element={<DemandForecastPage />} />
-            <Route path="reports" element={<ReportsCenterPage />} />
-            <Route path="import" element={<CSVImportPage />} />
-            <Route path="notifications" element={<NotificationCenterPage />} />
-            <Route path="integrations" element={<IntegrationsHubPage />} />
-            <Route path="shipping" element={<ShippingCarrierPage />} />
-            <Route path="api-docs" element={<PublicAPIDocsPage />} />
-            <Route path="settings/api-keys" element={<APIKeysSettingsPage />} />
-            <Route path="settings/webhooks" element={<WebhooksSettingsPage />} />
-            <Route path="settings/billing" element={<BillingSettingsPage />} />
-            <Route path="settings/currencies" element={<CurrenciesSettingsPage />} />
-            <Route path="settings/3pl-routing" element={<WarehouseRoutingPage />} />
-            <Route path="settings/backup" element={<BackupRecoveryPage />} />
-            <Route path="settings/security-audit" element={<SecurityAuditPage />} />
-            <Route path="settings/branding" element={<WhiteLabelSettingsPage />} />
-            <Route path="settings/demo-data" element={<DemoDataSettingsPage />} />
-            <Route path="ledger" element={<TransactionLedgerPage />} />
-            <Route path="team" element={<MembersPage />} />
-            <Route path="roles" element={<RolesPage />} />
-            <Route path="settings" element={<WorkspaceSettingsPage />} />
-          </Route>
+            {/*
+              Protected App Routes — workspace in the URL (PRD §6).
+              AppLayout resolves :workspaceSlug → active workspace + membership.
+            */}
+            <Route path="/app/:workspaceSlug" element={<AppLayout />}>
+              <Route index element={<DashboardPage />} />
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="ai-copilot" element={<AICopilotAssistantPage />} />
+              <Route path="products" element={<ProductsPage />} />
+              <Route path="categories" element={<CategoriesPage />} />
+              <Route path="warehouses" element={<WarehousesPage />} />
+              <Route path="inventory" element={<InventoryPage />} />
+              <Route path="transfers" element={<TransfersPage />} />
+              <Route path="transfers/:id" element={<TransferDetailPage />} />
+              <Route path="counts" element={<CycleCountPage />} />
+              <Route path="counts/:id" element={<CountDetailPage />} />
+              <Route path="scanner" element={<BarcodeScannerPage />} />
+              <Route path="batches" element={<BatchesPage />} />
+              <Route path="suppliers" element={<SuppliersPage />} />
+              <Route path="customers" element={<CustomersPage />} />
+              <Route path="purchases" element={<PurchaseOrdersPage />} />
+              <Route path="purchases/:id" element={<PODetailPage />} />
+              <Route path="sales" element={<SalesOrdersPage />} />
+              <Route path="sales/:id" element={<SODetailPage />} />
+              <Route path="returns" element={<ReturnsPage />} />
+              <Route path="returns/:id" element={<ReturnDetailPage />} />
+              <Route path="reorder" element={<ReorderRecommendationsPage />} />
+              <Route path="automation" element={<AutomationRulesPage />} />
+              <Route path="abc-analysis" element={<ABCAnalysisPage />} />
+              <Route path="forecast" element={<DemandForecastPage />} />
+              <Route path="reports" element={<ReportsCenterPage />} />
+              <Route path="import" element={<CSVImportPage />} />
+              <Route path="notifications" element={<NotificationCenterPage />} />
+              <Route path="integrations" element={<IntegrationsHubPage />} />
+              <Route path="shipping" element={<ShippingCarrierPage />} />
+              <Route path="api-docs" element={<PublicAPIDocsPage />} />
+              <Route path="settings/api-keys" element={<APIKeysSettingsPage />} />
+              <Route path="settings/webhooks" element={<WebhooksSettingsPage />} />
+              <Route path="settings/billing" element={<BillingSettingsPage />} />
+              <Route path="settings/currencies" element={<CurrenciesSettingsPage />} />
+              <Route path="settings/3pl-routing" element={<WarehouseRoutingPage />} />
+              <Route path="settings/backup" element={<BackupRecoveryPage />} />
+              <Route path="settings/security-audit" element={<SecurityAuditPage />} />
+              <Route path="settings/branding" element={<WhiteLabelSettingsPage />} />
+              <Route path="settings/demo-data" element={<DemoDataSettingsPage />} />
+              <Route path="ledger" element={<TransactionLedgerPage />} />
+              <Route path="team" element={<MembersPage />} />
+              <Route path="roles" element={<RolesPage />} />
+              <Route path="settings" element={<WorkspaceSettingsPage />} />
+            </Route>
 
-          {/* Legacy paths → new /app/:workspaceSlug equivalents (redirects) */}
-          <Route path="/" element={<Navigate to="/app" replace />} />
-          <Route path="/app" element={<LegacyAppRedirect />} />
-          <Route path="/dashboard" element={<LegacyRedirect section="dashboard" />} />
-          <Route path="/products" element={<LegacyRedirect section="products" />} />
-          <Route path="/categories" element={<LegacyRedirect section="categories" />} />
-          <Route path="/warehouses" element={<LegacyRedirect section="warehouses" />} />
-          <Route path="/inventory" element={<LegacyRedirect section="inventory" />} />
-          <Route path="/ledger" element={<LegacyRedirect section="ledger" />} />
-          <Route path="/transfers" element={<LegacyRedirect section="transfers" />} />
-          <Route path="/counts" element={<LegacyRedirect section="counts" />} />
-          <Route path="/scanner" element={<LegacyRedirect section="scanner" />} />
-          <Route path="/batches" element={<LegacyRedirect section="batches" />} />
-          <Route path="/suppliers" element={<LegacyRedirect section="suppliers" />} />
-          <Route path="/customers" element={<LegacyRedirect section="customers" />} />
-          <Route path="/purchases" element={<LegacyRedirect section="purchases" />} />
-          <Route path="/sales" element={<LegacyRedirect section="sales" />} />
-          <Route path="/returns" element={<LegacyRedirect section="returns" />} />
-          <Route path="/reorder" element={<LegacyRedirect section="reorder" />} />
-          <Route path="/automation" element={<LegacyRedirect section="automation" />} />
-          <Route path="/abc-analysis" element={<LegacyRedirect section="abc-analysis" />} />
-          <Route path="/forecast" element={<LegacyRedirect section="forecast" />} />
-          <Route path="/reports" element={<LegacyRedirect section="reports" />} />
-          <Route path="/import" element={<LegacyRedirect section="import" />} />
-          <Route path="/notifications" element={<LegacyRedirect section="notifications" />} />
-          <Route path="/integrations" element={<LegacyRedirect section="integrations" />} />
-          <Route path="/shipping" element={<LegacyRedirect section="shipping" />} />
-          <Route path="/api-docs" element={<LegacyRedirect section="api-docs" />} />
-          <Route path="/ai-copilot" element={<LegacyRedirect section="ai-copilot" />} />
-          <Route path="/team" element={<LegacyRedirect section="team" />} />
-          <Route path="/roles" element={<LegacyRedirect section="roles" />} />
-          <Route path="/settings" element={<LegacyRedirect section="settings" />} />
-          <Route path="/settings/:section" element={<LegacyRedirect />} />
+            {/* Legacy paths → new /app/:workspaceSlug equivalents (redirects) */}
+            <Route path="/" element={<Navigate to="/app" replace />} />
+            <Route path="/app" element={<LegacyAppRedirect />} />
+            <Route path="/dashboard" element={<LegacyRedirect section="dashboard" />} />
+            <Route path="/products" element={<LegacyRedirect section="products" />} />
+            <Route path="/categories" element={<LegacyRedirect section="categories" />} />
+            <Route path="/warehouses" element={<LegacyRedirect section="warehouses" />} />
+            <Route path="/inventory" element={<LegacyRedirect section="inventory" />} />
+            <Route path="/ledger" element={<LegacyRedirect section="ledger" />} />
+            <Route path="/transfers" element={<LegacyRedirect section="transfers" />} />
+            <Route path="/counts" element={<LegacyRedirect section="counts" />} />
+            <Route path="/scanner" element={<LegacyRedirect section="scanner" />} />
+            <Route path="/batches" element={<LegacyRedirect section="batches" />} />
+            <Route path="/suppliers" element={<LegacyRedirect section="suppliers" />} />
+            <Route path="/customers" element={<LegacyRedirect section="customers" />} />
+            <Route path="/purchases" element={<LegacyRedirect section="purchases" />} />
+            <Route path="/sales" element={<LegacyRedirect section="sales" />} />
+            <Route path="/returns" element={<LegacyRedirect section="returns" />} />
+            <Route path="/reorder" element={<LegacyRedirect section="reorder" />} />
+            <Route path="/automation" element={<LegacyRedirect section="automation" />} />
+            <Route path="/abc-analysis" element={<LegacyRedirect section="abc-analysis" />} />
+            <Route path="/forecast" element={<LegacyRedirect section="forecast" />} />
+            <Route path="/reports" element={<LegacyRedirect section="reports" />} />
+            <Route path="/import" element={<LegacyRedirect section="import" />} />
+            <Route path="/notifications" element={<LegacyRedirect section="notifications" />} />
+            <Route path="/integrations" element={<LegacyRedirect section="integrations" />} />
+            <Route path="/shipping" element={<LegacyRedirect section="shipping" />} />
+            <Route path="/api-docs" element={<LegacyRedirect section="api-docs" />} />
+            <Route path="/ai-copilot" element={<LegacyRedirect section="ai-copilot" />} />
+            <Route path="/team" element={<LegacyRedirect section="team" />} />
+            <Route path="/roles" element={<LegacyRedirect section="roles" />} />
+            <Route path="/settings" element={<LegacyRedirect section="settings" />} />
+            <Route path="/settings/:section" element={<LegacyRedirect />} />
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/app" replace />} />
-        </Routes>
-      </Suspense>
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/app" replace />} />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }
