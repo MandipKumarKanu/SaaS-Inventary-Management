@@ -14,10 +14,13 @@ import { TableHead, TableRow, TableCell } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from '@/components/ui/sonner';
 
+import { useCurrency } from '../../lib/currency';
+
 export function SODetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { activeWorkspace } = useWorkspaceStore();
+  const { format } = useCurrency();
   const [so, setSo] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -138,7 +141,7 @@ export function SODetailPage() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Total Value</p>
-            <p className="mt-1 text-sm font-extrabold text-success">${so.total_amount}</p>
+            <p className="mt-1 text-sm font-extrabold text-success">{format(so.total_amount)}</p>
           </div>
         </CardContent>
       </Card>
@@ -166,7 +169,7 @@ export function SODetailPage() {
               {item.product?.name}{' '}
               <span className="text-xs font-normal text-muted-foreground">({item.product?.sku})</span>
             </TableCell>
-            <TableCell className="font-semibold">${item.unit_price}</TableCell>
+            <TableCell className="font-semibold">{format(item.unit_price)}</TableCell>
             <TableCell className="font-bold">{item.ordered_qty}</TableCell>
             <TableCell
               className={
@@ -178,7 +181,7 @@ export function SODetailPage() {
               {item.fulfilled_qty || 0} / {item.ordered_qty}
             </TableCell>
             <TableCell className="text-right font-extrabold text-success">
-              ${(item.ordered_qty * item.unit_price).toFixed(2)}
+              {format(item.ordered_qty * item.unit_price)}
             </TableCell>
           </TableRow>
         ))}
@@ -187,7 +190,7 @@ export function SODetailPage() {
       <Card>
         <CardContent className="flex items-center justify-between p-6">
           <span className="text-sm text-muted-foreground">Order Total</span>
-          <span className="text-xl font-extrabold text-success">${so.total_amount}</span>
+          <span className="text-xl font-extrabold text-success">{format(so.total_amount)}</span>
         </CardContent>
       </Card>
     </div>

@@ -15,8 +15,11 @@ import { TableCell, TableHead, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 
+import { useCurrency } from '../../lib/currency';
+
 export function ProductsPage() {
   const { activeWorkspace } = useWorkspaceStore();
+  const { symbol, format } = useCurrency();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -149,8 +152,8 @@ export function ProductsPage() {
             </TableCell>
             <TableCell>
               <div className="text-[13px]">
-                <span className="font-bold">${parseFloat(p.selling_price).toFixed(2)}</span>
-                <span className="ml-1.5 text-[11px] text-muted-foreground">(Cost: ${parseFloat(p.cost_price).toFixed(2)})</span>
+                <span className="font-bold">{format(p.selling_price)}</span>
+                <span className="ml-1.5 text-[11px] text-muted-foreground">(Cost: {format(p.cost_price)})</span>
               </div>
             </TableCell>
             <TableCell className="hidden md:table-cell">

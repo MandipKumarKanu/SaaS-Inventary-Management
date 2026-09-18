@@ -14,8 +14,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { usePagination } from '@/hooks/usePagination';
 import { PaginationBar } from '@/components/common/PaginationBar';
 
+import { useCurrency } from '../../lib/currency';
+
 export function SalesOrdersPage() {
   const { activeWorkspace } = useWorkspaceStore();
+  const { format } = useCurrency();
   const navigate = useNavigate();
   const [sos, setSos] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -132,7 +135,7 @@ export function SalesOrdersPage() {
             <TableCell>
               {s.warehouse?.name} ({s.warehouse?.code})
             </TableCell>
-            <TableCell className="font-extrabold text-success">${s.total_amount}</TableCell>
+            <TableCell className="font-extrabold text-success">{format(s.total_amount)}</TableCell>
             <TableCell>
               <StatusBadge status={s.status} />
             </TableCell>

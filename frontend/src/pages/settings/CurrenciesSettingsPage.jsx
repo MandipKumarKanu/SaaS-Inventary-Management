@@ -12,8 +12,11 @@ import { Button } from '@/components/ui/button';
 import { TableHead, TableRow, TableCell } from '@/components/ui/table';
 import { toast } from '@/components/ui/sonner';
 
+import { useCurrency } from '../../lib/currency';
+
 export function CurrenciesSettingsPage() {
   const { activeWorkspace } = useWorkspaceStore();
+  const { symbol: workspaceSymbol, currencyCode: workspaceCurrencyCode } = useCurrency();
   const [rates, setRates] = useState([]);
   const [currencyCode, setCurrencyCode] = useState('');
   const [symbol, setSymbol] = useState('');
@@ -74,7 +77,7 @@ export function CurrenciesSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Add / Update Exchange Rate</CardTitle>
-          <CardDescription>Rates are relative to the USD base currency.</CardDescription>
+          <CardDescription>Rates are relative to the {workspaceCurrencyCode} base currency.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleAddRate} className="grid items-center gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
@@ -97,7 +100,7 @@ export function CurrenciesSettingsPage() {
             <Input
               type="number"
               step="0.0001"
-              placeholder="Rate relative to base (USD)"
+              placeholder={`Rate relative to base (${workspaceCurrencyCode})`}
               value={exchangeRate}
               onChange={(e) => setExchangeRate(e.target.value)}
               required
@@ -116,7 +119,7 @@ export function CurrenciesSettingsPage() {
             <>
               <TableHead>Currency Code</TableHead>
               <TableHead>Symbol</TableHead>
-              <TableHead>Exchange Rate (Base 1.00 USD)</TableHead>
+              <TableHead>Exchange Rate (Base 1.00 {workspaceCurrencyCode})</TableHead>
               <TableHead>Last Updated</TableHead>
             </>
           }
@@ -132,10 +135,10 @@ export function CurrenciesSettingsPage() {
             <TableCell className="font-bold">
               <span className="flex items-center gap-2">
                 <Globe className="h-4 w-4 text-primary" />
-                USD (Default Base)
+                {workspaceCurrencyCode} (Default Base)
               </span>
             </TableCell>
-            <TableCell className="font-bold">$</TableCell>
+            <TableCell className="font-bold">{workspaceSymbol}</TableCell>
             <TableCell className="font-mono">1.0000</TableCell>
             <TableCell className="text-[13px] text-muted-foreground">System Default</TableCell>
           </TableRow>

@@ -23,6 +23,8 @@ const CURRENCY_OPTIONS = [
   { code: 'JPY', label: 'JPY – Japanese Yen (¥)' },
 ];
 
+import { getCurrencySymbol } from '../../lib/currency';
+
 export function WorkspaceSettingsPage() {
   const { activeWorkspace, fetchWorkspaces } = useWorkspaceStore();
   const [name, setName] = useState(activeWorkspace?.name || '');
@@ -47,17 +49,19 @@ export function WorkspaceSettingsPage() {
     setMessage(null);
 
     try {
+      const selectedCurrency = currency.toUpperCase();
       const updatedSettings = {
         ...(activeWorkspace.settings || {}),
-        currency: currency.toUpperCase(),
-        default_currency: currency.toUpperCase(),
+        currency: selectedCurrency,
+        default_currency: selectedCurrency,
+        currency_symbol: getCurrencySymbol(selectedCurrency),
       };
       await api.patch(`/workspaces/${activeWorkspace.id}`, {
         name,
         settings: updatedSettings,
       });
       setMessage({ type: 'success', text: 'Workspace details updated successfully!' });
-      fetchWorkspaces();
+      await fetchWorkspaces();
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     } finally {

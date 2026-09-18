@@ -8,8 +8,11 @@ import { Field, FormError } from '@/components/common/FormField';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 
+import { useCurrency } from '../../lib/currency';
+
 export function CreateProductModal({ onClose, onProductCreated }) {
   const { activeWorkspace } = useWorkspaceStore();
+  const { symbol } = useCurrency();
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
   const [barcode, setBarcode] = useState('');
@@ -143,7 +146,7 @@ export function CreateProductModal({ onClose, onProductCreated }) {
             />
           </Field>
 
-          <Field label="Cost Price ($)" htmlFor="product-cost">
+          <Field label={`Cost Price (${symbol})`} htmlFor="product-cost">
             <Input
               id="product-cost"
               type="number"
@@ -153,7 +156,7 @@ export function CreateProductModal({ onClose, onProductCreated }) {
             />
           </Field>
 
-          <Field label="Selling Price ($)" htmlFor="product-price">
+          <Field label={`Selling Price (${symbol})`} htmlFor="product-price">
             <Input
               id="product-price"
               type="number"

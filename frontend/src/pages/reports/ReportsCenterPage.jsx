@@ -10,8 +10,11 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
+import { useCurrency } from '../../lib/currency';
+
 export function ReportsCenterPage() {
   const { activeWorkspace } = useWorkspaceStore();
+  const { symbol, format } = useCurrency();
   const [report, setReport] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -39,7 +42,7 @@ export function ReportsCenterPage() {
     if (!report) return;
     const csvRows = [
       ['Metric', 'Value'],
-      ['Total Inventory Valuation ($)', report.totalValuation],
+      [`Total Inventory Valuation (${symbol})`, report.totalValuation],
       ['Total SKU Count', report.totalSKUs],
       ['Class A SKUs', report.classASKUs],
       ['Class B SKUs', report.classBSKUs],
@@ -85,7 +88,7 @@ export function ReportsCenterPage() {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <StatCard
                 title="Total Asset Valuation"
-                value={`$${report?.totalValuation?.toLocaleString()}`}
+                value={format(report?.totalValuation)}
                 icon={DollarSign}
               />
               <StatCard

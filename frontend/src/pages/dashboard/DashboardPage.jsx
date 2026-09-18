@@ -20,6 +20,8 @@ import { Button } from '@/components/ui/button';
 import { StatCard } from '@/components/common/StatCard';
 import { EmptyState } from '@/components/common/EmptyState';
 
+import { useCurrency } from '../../lib/currency';
+
 const TOOLTIP_CONTENT_STYLE = {
   backgroundColor: 'var(--color-card)',
   border: '1px solid var(--color-border)',
@@ -32,6 +34,7 @@ const AXIS_TICK = { fill: 'var(--color-muted-foreground)', fontSize: 12 };
 
 export function DashboardPage() {
   const { activeWorkspace } = useWorkspaceStore();
+  const { symbol, format } = useCurrency();
   const [stats, setStats] = useState({
     productsCount: 0,
     warehousesCount: 0,
@@ -150,7 +153,7 @@ export function DashboardPage() {
   const statCards = [
     {
       title: 'Total Valuation',
-      value: `$${stats.totalValuation.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+      value: format(stats.totalValuation),
       icon: DollarSign,
       badge: 'Asset Value',
     },

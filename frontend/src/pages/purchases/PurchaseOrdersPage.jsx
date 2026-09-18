@@ -13,9 +13,11 @@ import { TableHead, TableRow, TableCell } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { usePagination } from '@/hooks/usePagination';
 import { PaginationBar } from '@/components/common/PaginationBar';
+import { useCurrency } from '../../lib/currency';
 
 export function PurchaseOrdersPage() {
   const { activeWorkspace } = useWorkspaceStore();
+  const { format } = useCurrency();
   const navigate = useNavigate();
   const [pos, setPos] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -132,7 +134,7 @@ export function PurchaseOrdersPage() {
             <TableCell>
               {p.warehouse?.name} ({p.warehouse?.code})
             </TableCell>
-            <TableCell className="font-extrabold text-success">${p.total_amount}</TableCell>
+            <TableCell className="font-extrabold text-success">{format(p.total_amount)}</TableCell>
             <TableCell>
               <StatusBadge status={p.status} />
             </TableCell>

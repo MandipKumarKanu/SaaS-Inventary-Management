@@ -15,10 +15,13 @@ import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from '@/components/ui/sonner';
 
+import { useCurrency } from '../../lib/currency';
+
 export function PODetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { activeWorkspace } = useWorkspaceStore();
+  const { format } = useCurrency();
   const [po, setPo] = useState(null);
   const [receivingQtys, setReceivingQtys] = useState({});
   const [isLoading, setIsLoading] = useState(true);
@@ -165,7 +168,7 @@ export function PODetailPage() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Total Value</p>
-            <p className="mt-1 text-sm font-extrabold text-success">${po.total_amount}</p>
+            <p className="mt-1 text-sm font-extrabold text-success">{format(po.total_amount)}</p>
           </div>
         </CardContent>
       </Card>
@@ -196,7 +199,7 @@ export function PODetailPage() {
                 {item.product?.name}{' '}
                 <span className="text-xs font-normal text-muted-foreground">({item.product?.sku})</span>
               </TableCell>
-              <TableCell className="font-semibold">${item.unit_cost}</TableCell>
+              <TableCell className="font-semibold">{format(item.unit_cost)}</TableCell>
               <TableCell className="font-bold">{item.ordered_qty}</TableCell>
               <TableCell
                 className={
@@ -229,7 +232,7 @@ export function PODetailPage() {
       <Card>
         <CardContent className="flex items-center justify-between p-6">
           <span className="text-sm text-muted-foreground">Order Total</span>
-          <span className="text-xl font-extrabold text-success">${po.total_amount}</span>
+          <span className="text-xl font-extrabold text-success">{format(po.total_amount)}</span>
         </CardContent>
       </Card>
     </div>

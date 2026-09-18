@@ -9,8 +9,11 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { TableHead, TableRow, TableCell } from '@/components/ui/table';
 
+import { useCurrency } from '../../lib/currency';
+
 export function ABCAnalysisPage() {
   const { activeWorkspace } = useWorkspaceStore();
+  const { format } = useCurrency();
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -81,7 +84,7 @@ export function ABCAnalysisPage() {
             <CardDescription>Tight inventory control and frequent cycle counts</CardDescription>
           </div>
           <Badge variant="secondary">
-            Total Asset Valuation: ${data?.totalValuation?.toLocaleString()}
+            Total Asset Valuation: {format(data?.totalValuation)}
           </Badge>
         </CardHeader>
         <CardContent>
@@ -113,9 +116,9 @@ export function ABCAnalysisPage() {
                   </span>
                 </TableCell>
                 <TableCell className="font-bold">{item.currentQty}</TableCell>
-                <TableCell className="text-muted-foreground">${item.costPrice}</TableCell>
+                <TableCell className="text-muted-foreground">{format(item.costPrice)}</TableCell>
                 <TableCell className="font-extrabold text-success">
-                  ${item.assetValue.toLocaleString()}
+                  {format(item.assetValue)}
                 </TableCell>
                 <TableCell className="font-bold text-primary">{item.cumulativePct}%</TableCell>
                 <TableCell className="text-xs text-muted-foreground">
