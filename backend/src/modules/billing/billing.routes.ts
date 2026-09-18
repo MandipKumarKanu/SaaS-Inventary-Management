@@ -16,10 +16,22 @@ import { parsePagination } from '../../shared/http.js';
 // than the global API limiter (guessing codes, repeated validation).
 const couponLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { code: 'RATE_LIMIT', message: 'Too many coupon attempts. Please try again later.' } },
+  skip: (req) => {
+    if (process.env.NODE_ENV === 'development') return true;
+    const ip = req.ip || req.socket.remoteAddress || '';
+    const host = req.headers.host || req.hostname || '';
+    return (
+      ip === '127.0.0.1' ||
+      ip === '::1' ||
+      ip === '::ffff:127.0.0.1' ||
+      host.includes('localhost') ||
+      host.includes('127.0.0.1')
+    );
+  },
 });
 
 const router = Router({ mergeParams: true });

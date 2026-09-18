@@ -83,13 +83,28 @@ app.use(express.json({
 // Phase 4: request-scoped audit context (IP + user-agent for audit_logs)
 app.use(auditContextMiddleware);
 
+// Rate limiting helper to skip localhost and dev mode
+const skipLocalhost = (req: express.Request) => {
+  if (env.NODE_ENV === 'development') return true;
+  const ip = req.ip || req.socket.remoteAddress || '';
+  const host = req.headers.host || req.hostname || '';
+  return (
+    ip === '127.0.0.1' ||
+    ip === '::1' ||
+    ip === '::ffff:127.0.0.1' ||
+    host.includes('localhost') ||
+    host.includes('127.0.0.1')
+  );
+};
+
 // Rate limiting
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500,
+  max: 2000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { code: 'RATE_LIMIT', message: 'Too many requests, please try again later.' } },
+  skip: skipLocalhost,
 });
 app.use('/api/', apiLimiter);
 
@@ -102,17 +117,19 @@ app.use(seoHeadersMiddleware);
 // Webhook endpoints use their own limiter (attacker-visible, unauthenticated surface)
 const webhookLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { code: 'RATE_LIMIT', message: 'Too many webhook requests.' } },
+  skip: skipLocalhost,
 });
 
 // Auth rate limiting (stricter)
 const authLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  max: 30,
+  max: 200,
   message: { success: false, error: { code: 'RATE_LIMIT', message: 'Too many authentication attempts.' } },
+  skip: skipLocalhost,
 });
 
 // ============================================

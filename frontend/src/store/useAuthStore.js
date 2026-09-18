@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api, getValidToken } from '../lib/api';
+import { useWorkspaceStore } from './useWorkspaceStore';
 
 const initialUser = (() => {
   try {
@@ -97,6 +98,11 @@ export const useAuthStore = create((set) => ({
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user');
     localStorage.removeItem('active_workspace_id');
+    try {
+      useWorkspaceStore.getState().resetStore();
+    } catch {
+      // Ignore if store not initialized
+    }
     set({ user: null, token: null });
   },
 

@@ -7,6 +7,7 @@ export const useWorkspaceStore = create((set, get) => ({
   membership: null,
   permissions: [],
   isLoading: false,
+  hasFetched: false,
   error: null,
 
   fetchWorkspaces: async () => {
@@ -14,7 +15,7 @@ export const useWorkspaceStore = create((set, get) => ({
     try {
       const res = await api.get('/workspaces');
       const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
-      set({ workspaces: list, isLoading: false });
+      set({ workspaces: list, isLoading: false, hasFetched: true });
 
       // Automatically select workspace if none selected or invalid
       const storedId = localStorage.getItem('active_workspace_id');
@@ -25,7 +26,7 @@ export const useWorkspaceStore = create((set, get) => ({
       }
       return list;
     } catch (err) {
-      set({ error: err.message, isLoading: false, workspaces: [] });
+      set({ error: err.message, isLoading: false, hasFetched: true, workspaces: [] });
       return [];
     }
   },
@@ -58,6 +59,7 @@ export const useWorkspaceStore = create((set, get) => ({
       set((state) => ({
         workspaces: [newWs, ...state.workspaces],
         isLoading: false,
+        hasFetched: true,
       }));
       get().setActiveWorkspace(newWs);
       return newWs;
@@ -65,6 +67,19 @@ export const useWorkspaceStore = create((set, get) => ({
       set({ error: err.message, isLoading: false });
       throw err;
     }
+  },
+
+  resetStore: () => {
+    localStorage.removeItem('active_workspace_id');
+    set({
+      workspaces: [],
+      activeWorkspace: null,
+      membership: null,
+      permissions: [],
+      isLoading: false,
+      hasFetched: false,
+      error: null,
+    });
   },
 
   hasPermission: (permissionCode) => {

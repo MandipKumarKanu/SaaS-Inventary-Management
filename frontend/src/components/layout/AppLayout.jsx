@@ -26,6 +26,7 @@ export function AppLayout() {
     activeWorkspace,
     membership,
     isLoading: isWsLoading,
+    hasFetched: isWsFetched,
     fetchWorkspaces,
     setActiveWorkspace,
     fetchCurrentMember,
@@ -44,14 +45,20 @@ export function AppLayout() {
     }
   }, [token, navigate]);
 
-  // 2. Boot: load workspaces once if store is empty
+  // 2. Boot: load workspaces once if store has not been fetched yet
   useEffect(() => {
     if (!token) return;
-    if (workspaces.length === 0 && !isWsLoading) {
+    if (!isWsFetched && !isWsLoading) {
       fetchWorkspaces();
     }
-    if (fetchProfile) fetchProfile();
-  }, [token, workspaces.length, isWsLoading, fetchWorkspaces, fetchProfile]);
+  }, [token, isWsFetched, isWsLoading, fetchWorkspaces]);
+
+  // Fetch profile once when token is present
+  useEffect(() => {
+    if (token && fetchProfile) {
+      fetchProfile();
+    }
+  }, [token, fetchProfile]);
 
   // 3. Sync route slug with activeWorkspace & fetch membership if missing
   useEffect(() => {
@@ -80,10 +87,17 @@ export function AppLayout() {
     }
   }, [token, workspaceSlug, workspaces, activeWorkspace, membership, setActiveWorkspace, fetchCurrentMember, navigate]);
 
+  // Auto-open create workspace modal if user has 0 workspaces after fetch completes
+  useEffect(() => {
+    if (isWsFetched && workspaces.length === 0) {
+      setIsCreateWsOpen(true);
+    }
+  }, [isWsFetched, workspaces.length]);
+
   if (!user || !token) return null;
 
-  // 4. Loading state: active if workspaces are fetching or membership for activeWorkspace is pending
-  const isResolving = isWsLoading || (activeWorkspace && (!membership || membership.workspace_id !== activeWorkspace.id));
+  // 4. Loading state: active if workspaces are fetching for the first time or membership is pending
+  const isResolving = (!isWsFetched && isWsLoading) || (activeWorkspace && (!membership || membership.workspace_id !== activeWorkspace.id));
 
   if (isResolving) {
     return (
@@ -94,7 +108,7 @@ export function AppLayout() {
   }
 
   // 5. Handle user with 0 workspaces
-  if (workspaces.length === 0 && !isWsLoading) {
+  if (isWsFetched && workspaces.length === 0) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <div className="w-full max-w-md space-y-6 rounded-xl border bg-card p-8 text-center text-card-foreground shadow-lg">
